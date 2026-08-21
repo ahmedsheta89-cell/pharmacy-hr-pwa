@@ -1,0 +1,31 @@
+import { useEffect, useState } from "react";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { trpc } from "@/lib/trpc";
+import { CircleAlert, Download, FileCheck2, MailX, Send, WalletCards } from "lucide-react";
+import { useLocation } from "wouter";
+
+const statusClass = (ready: boolean) => ready ? "bg-[#e6f5ef] text-[#0f766e]" : "bg-[#fff3db] text-[#b87516]";
+const currency = new Intl.NumberFormat("ar-EG", { style: "currency", currency: "EGP", maximumFractionDigits: 0 });
+
+function RunDeliveryList({ payrollRunId, title }: { payrollRunId: number; title: string }) {
+  const [, setLocation] = useLocation();
+  const readiness = trpc.payroll.deliveryReadiness.useQuery({ payrollRunId });
+  if (readiness.isLoading) return <Card className="border-[#e1ece6] bg-white"><CardContent className="p-5 text-sm text-slate-500">جارٍ إعداد قائمة {title}…</CardContent></Card>;
+  if (readiness.isError || !readiness.data) return <Card className="border-rose-200 bg-rose-50"><CardContent className="p-5 text-sm text-rose-700">تعذر تحميل قائمة التسليم لهذا المسير.</CardContent></Card>;
+  const { run, items } = readiness.data;
+  return <Card className="border-[#e1ece6] bg-white"><CardHeader className="pb-3"><div className="flex flex-wrap items-start justify-between gap-3"><div><CardTitle className="text-base text-[#17344a]">{title}</CardTitle><p className="mt-1 text-xs text-slate-500">قائمة تشغيل داخلية؛ لا تُرسل بيانات للموظفين من هذه الصفحة.</p></div><Badge className={statusClass(run.delivery.ready)}>{run.delivery.label}</Badge></div></CardHeader><CardContent><p className="rounded-xl bg-[#f8fcfa] p-3 text-xs leading-6 text-slate-600">{run.delivery.description}</p><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[560px] text-right text-sm"><thead className="border-b border-[#e1ece6] text-xs text-slate-500"><tr><th className="p-3 font-bold">الموظف</th><th className="p-3 font-bold">الكود</th><th className="p-3 font-bold">الوظيفة</th><th className="p-3 font-bold">صافي المستحق</th><th className="p-3 font-bold">الحالة</th></tr></thead><tbody>{items.map(item => <tr key={item.employeeCode} className="border-b border-[#f0f4f2]"><td className="p-3 font-bold text-[#17344a]">{item.employeeName}</td><td className="p-3 text-slate-500">{item.employeeCode}</td><td className="p-3 text-slate-500">{item.jobTitle}</td><td className="p-3 font-semibold text-[#17344a]">{currency.format(item.netSalary)}</td><td className="p-3"><Badge className={statusClass(item.delivery.ready)}>{item.delivery.label}</Badge></td></tr>)}</tbody></table></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#edf3ef] pt-4"><p className="text-xs text-slate-500"><strong>القنوات:</strong> تنزيل Excel/PDF يدوي فقط؛ البريد وواتساب غير مهيأين.</p><Button size="sm" variant="outline" onClick={() => setLocation("/payroll")} className="border-[#b9d8ca] text-[#0f766e] hover:bg-[#eaf4ef]"><Download className="ml-1 h-3.5 w-3.5" />فتح صفحة التصدير</Button></div></CardContent></Card>;
+}
+
+export default function PayrollDelivery() {
+  const { user } = useAuth();
+  const allowed = ["admin", "owner", "manager", "hr_manager"].includes(user?.role ?? "");
+  const branches = trpc.organization.listBranches.useQuery(undefined, { enabled: allowed });
+  const [branchId, setBranchId] = useState(0);
+  useEffect(() => { if (!branchId && branches.data?.[0]) setBranchId(branches.data[0].id); }, [branchId, branches.data]);
+  const runs = trpc.payroll.listRuns.useQuery({ branchId }, { enabled: allowed && branchId > 0 });
+  if (!allowed) return <div dir="rtl" className="rounded-3xl border border-[#dce9e2] bg-white p-8 text-center text-sm text-slate-600">قائمة جاهزية الكشوف متاحة للمالك والمدير ومدير الموارد البشرية فقط.</div>;
+  return <div dir="rtl" className="space-y-6"><section className="flex flex-col gap-4 rounded-[1.75rem] border border-[#dce9e2] bg-white p-6 shadow-[0_18px_42px_-34px_rgba(23,52,74,.45)] lg:flex-row lg:items-end lg:justify-between"><div><p className="text-sm font-bold text-[#0f766e]">تشغيل داخلي مجاني</p><h1 className="mt-1 flex items-center gap-2 text-3xl font-black tracking-tight text-[#17344a]"><FileCheck2 className="h-7 w-7 text-[#0f766e]" />جاهزية كشوف الرواتب</h1><p className="mt-2 max-w-2xl text-sm leading-7 text-slate-500">قائمة عملية توضح لكل موظف إن كان الكشف معتمداً وجاهزاً للتنزيل. لا تنشئ هذه الصفحة أي بريد أو رسالة واتساب.</p></div><label className="w-full lg:w-56"><span className="mb-1 block text-xs font-bold text-slate-600">الفرع</span><select value={branchId || ""} onChange={event => setBranchId(Number(event.target.value))} className="h-10 w-full rounded-xl border border-[#d7e6df] bg-white px-3 text-sm text-[#17344a] outline-none focus:ring-2 focus:ring-[#0f766e]"><option value="" disabled>اختر الفرع</option>{branches.data?.map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label></section><Card className="border-amber-200 bg-amber-50"><CardContent className="flex gap-3 p-4 text-sm leading-6 text-amber-900"><MailX className="mt-0.5 h-5 w-5 shrink-0" /><p><strong>تعطيل الإرسال مقصود:</strong> لا توجد بيانات اعتماد لمزود بريد أو واتساب، ولذلك تبقى القناة الوحيدة المتاحة هي التصدير اليدوي بعد الاعتماد.</p></CardContent></Card>{runs.isLoading ? <div className="grid min-h-64 place-items-center rounded-3xl bg-white text-sm font-bold text-[#0f766e]">جارٍ تحميل المسيرات…</div> : null}{runs.isError ? <Card className="border-rose-200 bg-rose-50"><CardContent className="flex gap-3 p-6 text-sm text-rose-700"><CircleAlert className="h-5 w-5 shrink-0" />تعذر تحميل المسيرات لهذا الفرع.</CardContent></Card> : null}{runs.data?.map(run => <RunDeliveryList key={run.id} payrollRunId={run.id} title={`كشف ${run.month}/${run.year}`} />)}{!runs.isLoading && !runs.isError && !(runs.data ?? []).length ? <Card className="border-[#e1ece6] bg-white"><CardContent className="grid min-h-48 place-items-center gap-3 p-8 text-center"><WalletCards className="h-8 w-8 text-[#0f766e]" /><p className="text-sm text-slate-500">لا توجد مسيرات رواتب لهذا الفرع بعد.</p></CardContent></Card> : null}</div>;
+}

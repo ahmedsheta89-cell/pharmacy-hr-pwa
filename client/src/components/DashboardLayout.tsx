@@ -33,6 +33,7 @@ import {
   Pill,
   ReceiptText,
   ShieldCheck,
+  Send,
   Sparkles,
   ClipboardCheck,
   UsersRound,
@@ -52,6 +53,7 @@ export const allNavigation = [
   { icon: BarChart3, label: "مؤشرات الأداء", path: "/kpis", roles: ["owner", "manager", "hr_manager", "pharmacist", "employee"] as AppRole[] },
   { icon: WalletCards, label: "الرواتب", path: "/payroll", roles: ["owner", "manager", "hr_manager"] as AppRole[] },
   { icon: ShieldCheck, label: "سجل اعتماد الرواتب", path: "/payroll-approvals", roles: ["owner", "manager", "hr_manager"] as AppRole[] },
+  { icon: Send, label: "جاهزية الكشوف", path: "/payroll-delivery", roles: ["owner", "manager", "hr_manager"] as AppRole[] },
   { icon: BarChart3, label: "لوحة الأداء", path: "/analytics", roles: ["owner", "manager", "hr_manager"] as AppRole[] },
   { icon: ClipboardCheck, label: "سيناريوهات الاعتماد", path: "/scenarios", roles: ["owner"] as AppRole[] },
 ];

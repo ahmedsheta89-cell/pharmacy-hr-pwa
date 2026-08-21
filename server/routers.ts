@@ -20,6 +20,7 @@ import {
 import { calculateKpiScore, calculatePayroll } from "../shared/hr-calculations";
 import { buildSalesKpiSummary } from "../shared/kpi-analytics";
 import { getNextPayrollStatus } from "../shared/payroll-approval";
+import { getPayrollDeliveryReadiness } from "../shared/payroll-delivery";
 import { createAttendanceQrToken, verifyAttendanceQrToken } from "../shared/attendance-qr";
 import { AttendanceQrWorkflowError, recordCheckInByQr, recordCheckOutByQr } from "./attendance-qr-workflow";
 import { getDb, getEmployeeByUserId } from "./db";
@@ -564,6 +565,15 @@ export const appRouter = router({
       if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
       await assertBranchScope(ctx.user, run.branchId);
       return db.select({ approval: payrollApprovals, approver: employees }).from(payrollApprovals).leftJoin(employees, eq(payrollApprovals.approverEmployeeId, employees.id)).where(eq(payrollApprovals.payrollRunId, run.id)).orderBy(asc(payrollApprovals.createdAt));
+    }),
+    deliveryReadiness: managerProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
+      await assertBranchScope(ctx.user, run.branchId);
+      const rows = await db.select({ item: payrollItems, employee: employees }).from(payrollItems).innerJoin(employees, eq(payrollItems.employeeId, employees.id)).where(eq(payrollItems.payrollRunId, run.id)).orderBy(asc(employees.fullName));
+      const delivery = getPayrollDeliveryReadiness(run.status);
+      return { run: { id: run.id, status: run.status, delivery }, items: rows.map(({ item, employee }) => ({ employeeCode: employee.employeeCode, employeeName: employee.fullName, jobTitle: employee.jobTitle, netSalary: toNumber(item.netSalary), delivery })) };
     }),
     exportData: managerProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = await requireDb();
