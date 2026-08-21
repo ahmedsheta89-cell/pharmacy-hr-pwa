@@ -42,7 +42,7 @@ import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 
 type AppRole = "owner" | "manager" | "pharmacist" | "employee";
 
-const allNavigation = [
+export const allNavigation = [
   { icon: LayoutDashboard, label: "نظرة عامة", path: "/", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: UsersRound, label: "الموظفون", path: "/employees", roles: ["owner", "manager"] as AppRole[] },
   { icon: Clock3, label: "الحضور والانصراف", path: "/attendance", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
@@ -59,10 +59,15 @@ const roleLabels: Record<AppRole, string> = {
   employee: "موظف",
 };
 
-function normalizeRole(role?: string): AppRole {
+export function normalizeLayoutRole(role?: string): AppRole {
   if (role === "admin" || role === "owner") return "owner";
   if (role === "manager" || role === "pharmacist") return role;
   return "employee";
+}
+
+export function getNavigationForRole(role?: string) {
+  const normalizedRole = normalizeLayoutRole(role);
+  return allNavigation.filter(item => item.roles.includes(normalizedRole));
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -87,8 +92,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  const role = normalizeRole(user.role);
-  const navigation = allNavigation.filter(item => item.roles.includes(role));
+  const role = normalizeLayoutRole(user.role);
+  const navigation = getNavigationForRole(user.role);
   const activeItem = navigation.find(item => item.path === location) ?? navigation[0];
   const initials = user.name?.trim().slice(0, 2).toUpperCase() || "PH";
 
