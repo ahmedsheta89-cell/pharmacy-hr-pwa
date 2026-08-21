@@ -10,6 +10,7 @@ import {
   kpiRecords,
   leaveBalances,
   leaveRequests,
+  payrollApprovals,
   payrollItems,
   payrollRuns,
   salaryStructures,
@@ -17,6 +18,8 @@ import {
   shifts,
 } from "../drizzle/schema";
 import { calculateKpiScore, calculatePayroll } from "../shared/hr-calculations";
+import { buildSalesKpiSummary } from "../shared/kpi-analytics";
+import { getNextPayrollStatus } from "../shared/payroll-approval";
 import { createAttendanceQrToken, verifyAttendanceQrToken } from "../shared/attendance-qr";
 import { AttendanceQrWorkflowError, recordCheckInByQr, recordCheckOutByQr } from "./attendance-qr-workflow";
 import { getDb, getEmployeeByUserId } from "./db";
@@ -28,7 +31,9 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 const staffRoles = ["manager", "pharmacist", "employee"] as const;
 const ownerRoles = ["admin", "owner"] as const;
-const managerRoles = ["admin", "owner", "manager"] as const;
+const managerRoles = ["admin", "owner", "manager", "hr_manager"] as const;
+const directManagerRoles = ["admin", "owner", "manager"] as const;
+const humanResourcesRoles = ["admin", "owner", "hr_manager"] as const;
 
 function hasRole(role: string, permitted: readonly string[]) {
   return permitted.includes(role);
@@ -41,6 +46,16 @@ const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
 
 const managerProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (!hasRole(ctx.user.role, managerRoles)) throw new TRPCError({ code: "FORBIDDEN", message: "ليس لديك صلاحية إدارة بيانات الفريق." });
+  return next({ ctx });
+});
+
+const directManagerProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!hasRole(ctx.user.role, directManagerRoles)) throw new TRPCError({ code: "FORBIDDEN", message: "اعتماد المدير المباشر متاح للمدير أو مالك النظام فقط." });
+  return next({ ctx });
+});
+
+const humanResourcesProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!hasRole(ctx.user.role, humanResourcesRoles)) throw new TRPCError({ code: "FORBIDDEN", message: "اعتماد الموارد البشرية متاح لمدير الموارد البشرية أو مالك النظام فقط." });
   return next({ ctx });
 });
 
@@ -70,6 +85,10 @@ async function requireEmployeeProfile(userId: number) {
   const employee = await getEmployeeByUserId(userId);
   if (!employee) throw new TRPCError({ code: "FORBIDDEN", message: "لم يُربط حسابك بعد بملف موظف." });
   return employee;
+}
+
+async function getOptionalEmployeeId(userId: number) {
+  return (await getEmployeeByUserId(userId))?.id ?? null;
 }
 
 function attendanceQrRepository(db: Awaited<ReturnType<typeof requireDb>>) {
@@ -199,6 +218,44 @@ export const appRouter = router({
         { value: remainingLeave === null ? "—" : `${remainingLeave} ي`, hint: remainingLeave === null ? "يظهر بعد إنشاء ملفك" : "الرصيد السنوي المتبقي" },
         { value: kpiScore === null ? "—" : `${Math.round(kpiScore)}%`, hint: kpiScore === null ? "ترتبط بالأهداف المسندة إليك" : "متوسط نتائجك الشهرية" },
       ] };
+    }),
+  }),
+
+  analytics: router({
+    kpiDashboard: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      const now = new Date();
+      const from = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      const team = await db.select().from(employees).where(and(eq(employees.branchId, input.branchId), eq(employees.employmentStatus, "active")));
+      const ids = new Set(team.map(employee => employee.id));
+      const [records, definitions, attendance] = await Promise.all([
+        db.select().from(kpiRecords).where(gte(kpiRecords.periodEnd, from)),
+        db.select().from(kpiDefinitions).where(eq(kpiDefinitions.branchId, input.branchId)),
+        db.select().from(attendanceRecords).where(gte(attendanceRecords.workDate, new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6))),
+      ]);
+      const definitionById = new Map(definitions.map(definition => [definition.id, definition]));
+      const scopedRecords = records.filter(record => ids.has(record.employeeId));
+      const categories = ["sales", "operations", "service", "attendance"].map(category => {
+        const list = scopedRecords.filter(record => definitionById.get(record.kpiDefinitionId)?.category === category);
+        return { category, score: list.length ? Math.round(list.reduce((sum, record) => sum + toNumber(record.score), 0) / list.length) : 0 };
+      });
+      const employeesPerformance = team.map(employee => {
+        const list = scopedRecords.filter(record => record.employeeId === employee.id);
+        return { name: employee.fullName, score: list.length ? Math.round(list.reduce((sum, record) => sum + toNumber(record.score), 0) / list.length) : 0 };
+      }).sort((a, b) => b.score - a.score).slice(0, 8);
+      const dailyAttendance = Array.from({ length: 7 }, (_, index) => {
+        const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6 + index);
+        const key = startOfDay(day).getTime();
+        const present = attendance.filter(record => ids.has(record.employeeId) && startOfDay(record.workDate).getTime() === key && (record.status === "present" || record.status === "late")).length;
+        return { day: new Intl.DateTimeFormat("ar-EG", { weekday: "short" }).format(day), present, team: team.length };
+      });
+      const sales = buildSalesKpiSummary(
+        definitions.map(definition => ({ id: definition.id, category: definition.category, unit: definition.unit, name: definition.name })),
+        scopedRecords.map(record => ({ employeeId: record.employeeId, kpiDefinitionId: record.kpiDefinitionId, actualValue: record.actualValue, score: record.score, periodStart: record.periodStart })),
+        now,
+      );
+      return { categories, employees: employeesPerformance, attendance: dailyAttendance, sales, teamSize: team.length };
     }),
   }),
 
@@ -467,6 +524,46 @@ export const appRouter = router({
       await assertBranchScope(ctx.user, input.branchId);
       const db = await requireDb();
       return db.select().from(payrollRuns).where(eq(payrollRuns.branchId, input.branchId)).orderBy(desc(payrollRuns.year), desc(payrollRuns.month));
+    }),
+    submitForApproval: directManagerProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
+      await assertBranchScope(ctx.user, run.branchId);
+      if (run.status !== "draft" && run.status !== "rejected") throw new TRPCError({ code: "CONFLICT", message: "لا يمكن إرسال هذا المسير للاعتماد في حالته الحالية." });
+      await db.update(payrollRuns).set({ status: "pending_manager", approvedByEmployeeId: null, approvedAt: null }).where(eq(payrollRuns.id, run.id));
+      return { success: true, status: "pending_manager" as const };
+    }),
+    reviewByManager: directManagerProcedure.input(z.object({ payrollRunId: z.number().int().positive(), decision: z.enum(["approved", "rejected", "returned"]), note: z.string().trim().max(1000).optional() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
+      await assertBranchScope(ctx.user, run.branchId);
+      if (run.status !== "pending_manager") throw new TRPCError({ code: "CONFLICT", message: "هذا المسير لا ينتظر اعتماد المدير المباشر." });
+      const approverEmployeeId = await getOptionalEmployeeId(ctx.user.id);
+      await db.insert(payrollApprovals).values({ payrollRunId: run.id, approverEmployeeId, approvalStage: "manager", decision: input.decision, note: input.note || null });
+      const status = getNextPayrollStatus("manager", input.decision);
+      await db.update(payrollRuns).set({ status }).where(eq(payrollRuns.id, run.id));
+      return { success: true, status };
+    }),
+    reviewByHr: humanResourcesProcedure.input(z.object({ payrollRunId: z.number().int().positive(), decision: z.enum(["approved", "rejected", "returned"]), note: z.string().trim().max(1000).optional() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
+      if (ctx.user.role === "hr_manager") await assertBranchScope(ctx.user, run.branchId);
+      if (run.status !== "pending_hr") throw new TRPCError({ code: "CONFLICT", message: "هذا المسير لا ينتظر اعتماد الموارد البشرية." });
+      const approverEmployeeId = await getOptionalEmployeeId(ctx.user.id);
+      await db.insert(payrollApprovals).values({ payrollRunId: run.id, approverEmployeeId, approvalStage: "hr_manager", decision: input.decision, note: input.note || null });
+      const status = getNextPayrollStatus("hr_manager", input.decision);
+      await db.update(payrollRuns).set({ status, approvedByEmployeeId: input.decision === "approved" ? approverEmployeeId : null, approvedAt: input.decision === "approved" ? new Date() : null }).where(eq(payrollRuns.id, run.id));
+      return { success: true, status };
+    }),
+    approvalHistory: managerProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
+      await assertBranchScope(ctx.user, run.branchId);
+      return db.select({ approval: payrollApprovals, approver: employees }).from(payrollApprovals).leftJoin(employees, eq(payrollApprovals.approverEmployeeId, employees.id)).where(eq(payrollApprovals.payrollRunId, run.id)).orderBy(asc(payrollApprovals.createdAt));
     }),
     exportData: managerProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = await requireDb();
