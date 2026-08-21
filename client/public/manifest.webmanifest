@@ -1,0 +1,20 @@
+{
+  "name": "نِظام | موارد الصيدلية",
+  "short_name": "نِظام",
+  "description": "نظام إدارة الموارد البشرية ومؤشرات الأداء المخصص للصيدليات.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7faf8",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/icons/pharmacy-hr.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

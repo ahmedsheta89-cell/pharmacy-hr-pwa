@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { attendanceRecords, employees, InsertUser, kpiRecords, leaveBalances, leaveRequests, shiftAssignments, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,24 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+export async function getEmployeeByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(employees).where(eq(employees.userId, userId)).limit(1);
+  return result[0];
+}
+
+export async function getEmployeeDashboardData(employeeId: number, periodStart: Date, periodEnd: Date) {
+  const db = await getDb();
+  if (!db) return { attendance: [], shifts: [], leaveBalances: [], leaveRequests: [], kpis: [] };
+
+  const [attendance, shifts, balances, requests, kpis] = await Promise.all([
+    db.select().from(attendanceRecords).where(and(eq(attendanceRecords.employeeId, employeeId), gte(attendanceRecords.workDate, periodStart), lte(attendanceRecords.workDate, periodEnd))).orderBy(desc(attendanceRecords.workDate)),
+    db.select().from(shiftAssignments).where(and(eq(shiftAssignments.employeeId, employeeId), gte(shiftAssignments.workDate, periodStart), lte(shiftAssignments.workDate, periodEnd))).orderBy(shiftAssignments.workDate),
+    db.select().from(leaveBalances).where(eq(leaveBalances.employeeId, employeeId)),
+    db.select().from(leaveRequests).where(eq(leaveRequests.employeeId, employeeId)).orderBy(desc(leaveRequests.createdAt)),
+    db.select().from(kpiRecords).where(and(eq(kpiRecords.employeeId, employeeId), gte(kpiRecords.periodStart, periodStart), lte(kpiRecords.periodEnd, periodEnd))).orderBy(desc(kpiRecords.periodEnd)),
+  ]);
+
+  return { attendance, shifts, leaveBalances: balances, leaveRequests: requests, kpis };
+}

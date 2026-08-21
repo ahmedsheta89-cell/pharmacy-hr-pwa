@@ -1,33 +1,22 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import DashboardLayout from "@/components/DashboardLayout";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { Card, CardContent } from "@/components/ui/card";
+import { startLogin } from "@/const";
+import { ArrowLeft, BarChart3, CalendarDays, CheckCircle2, Clock3, Pill, ShieldCheck, UsersRound } from "lucide-react";
+import { lazy, Suspense } from "react";
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Workflow, Frontend Best Practices, Design Guide and Common Pitfalls
- */
+const Dashboard = lazy(() => import("./Dashboard"));
+
+const features = [
+  { icon: UsersRound, title: "ملفات موظفين متكاملة", text: "كل التفاصيل الوظيفية والوثائق والشهادات في سجل منظم." },
+  { icon: Clock3, title: "حضور دقيق", text: "سجلات يومية وساعات فعلية وتأخيرات تُحتسب تلقائياً." },
+  { icon: BarChart3, title: "KPIs قابلة للقياس", text: "نتائج أداء مرتبطة بالمبيعات ومتوسط الفاتورة والالتزام." },
+];
+
 export default function Home() {
-  // The useAuth hook provides authentication state.
-  // To implement login/logout, call logout(), or start login from an event
-  // handler: onClick={() => startLogin()} (imported from "@/const"). Never call
-  // startLogin() during render (no href={startLogin()}) — it mints a one-time
-  // nonce cookie and must run only at the moment of navigation.
-  let { user, loading, error, isAuthenticated, logout } = useAuth();
-
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
-
-  return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
-      </main>
-    </div>
-  );
+  const { isAuthenticated, loading } = useAuth();
+  if (!loading && isAuthenticated) return <DashboardLayout><Suspense fallback={<div className="grid min-h-72 place-items-center text-sm font-bold text-[#0f766e]">جارٍ تحميل لوحة العمل…</div>}><Dashboard /></Suspense></DashboardLayout>;
+  return <div dir="rtl" className="min-h-screen overflow-hidden bg-[#f4f7f5] text-[#17344a]"><header className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 md:px-8"><div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-[#0f766e] text-white shadow-lg shadow-[#0f766e]/20"><Pill className="h-5 w-5" /></span><div><p className="font-extrabold tracking-tight">نِظام</p><p className="text-[10px] font-bold tracking-[.14em] text-[#0f766e]">PHARMACY PEOPLE</p></div></div><Button onClick={() => startLogin()} variant="outline" className="rounded-xl border-[#b9d8ca] bg-white font-bold text-[#0f766e] hover:bg-[#eaf4ef] hover:text-[#0f766e]">تسجيل الدخول</Button></header><main><section className="relative mx-auto max-w-7xl px-5 pb-20 pt-12 md:px-8 md:pt-20"><div className="relative z-10 grid items-center gap-12 lg:grid-cols-[1fr_.85fr]"><div><Badge className="border-0 bg-[#e6f5ef] px-3 py-1 text-[#0f766e] hover:bg-[#e6f5ef]"><ShieldCheck className="ml-1.5 h-3.5 w-3.5" />مساحة عمل آمنة للصيدليات</Badge><h1 className="mt-5 max-w-3xl text-4xl font-extrabold leading-[1.2] tracking-tight text-[#17344a] md:text-6xl">إدارة فريق الصيدلية، <span className="text-[#0f766e]">ببساطة ووضوح.</span></h1><p className="mt-6 max-w-xl text-base leading-8 text-slate-500 md:text-lg">من الحضور والورديات إلى الإجازات ومؤشرات الأداء والرواتب؛ منصة PWA واحدة تساعدك على بناء تشغيل أكثر انضباطاً.</p><div className="mt-8 flex flex-wrap gap-3"><Button onClick={() => startLogin()} className="h-12 rounded-xl bg-[#0f766e] px-6 font-bold hover:bg-[#0b5c56]">دخول مساحة العمل<ArrowLeft className="mr-2 h-4 w-4" /></Button><div className="flex h-12 items-center gap-2 rounded-xl border border-[#dce9e2] bg-white px-4 text-xs font-bold text-slate-500"><CheckCircle2 className="h-4 w-4 text-[#0f766e]" />قابل للتثبيت على الهاتف والكمبيوتر</div></div></div><Card className="border-0 bg-[#17344a] text-white shadow-[0_32px_80px_-40px_rgba(23,52,74,.85)]"><CardContent className="p-7"><div className="flex items-center justify-between"><div><p className="text-xs font-bold text-[#a7ebcf]">منصة تشغيل موحّدة</p><p className="mt-2 text-xl font-extrabold">لوحة قيادة الفريق</p></div><span className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 text-[#9ee4c9]"><CalendarDays className="h-5 w-5" /></span></div><div className="mt-7 space-y-3">{["حضور وانصراف دقيق", "جدولة ورديات مرنة", "رواتب مرتبطة بالأداء"].map((line, index) => <div key={line} className="flex items-center justify-between rounded-xl bg-white/5 px-4 py-3"><span className="text-sm font-semibold">{line}</span><span className="grid h-6 w-6 place-items-center rounded-lg bg-[#0f766e] text-[11px] font-extrabold">{index + 1}</span></div>)}</div></CardContent></Card></div><div className="pointer-events-none absolute -right-28 top-8 h-72 w-72 rounded-full bg-[#bae9d4]/50 blur-3xl" /></section><section className="border-y border-[#dce9e2] bg-white/75"><div className="mx-auto grid max-w-7xl gap-4 px-5 py-10 md:grid-cols-3 md:px-8">{features.map(feature => <div key={feature.title} className="flex gap-4 rounded-2xl p-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#e6f5ef] text-[#0f766e]"><feature.icon className="h-5 w-5" /></span><div><h2 className="font-extrabold">{feature.title}</h2><p className="mt-1 text-sm leading-6 text-slate-500">{feature.text}</p></div></div>)}</div></section></main></div>;
 }

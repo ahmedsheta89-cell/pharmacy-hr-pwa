@@ -1,9 +1,13 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -17,246 +21,160 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
-  useSidebar,
 } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
-import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
-import { CSSProperties, useEffect, useRef, useState } from "react";
+import {
+  BarChart3,
+  CalendarDays,
+  ChevronLeft,
+  Clock3,
+  LayoutDashboard,
+  LogOut,
+  Pill,
+  ReceiptText,
+  ShieldCheck,
+  Sparkles,
+  UsersRound,
+  WalletCards,
+} from "lucide-react";
 import { useLocation } from "wouter";
-import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
-import { Button } from "./ui/button";
+import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Page 1", path: "/" },
-  { icon: Users, label: "Page 2", path: "/some-path" },
+type AppRole = "owner" | "manager" | "pharmacist" | "employee";
+
+const allNavigation = [
+  { icon: LayoutDashboard, label: "نظرة عامة", path: "/", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
+  { icon: UsersRound, label: "الموظفون", path: "/employees", roles: ["owner", "manager"] as AppRole[] },
+  { icon: Clock3, label: "الحضور والانصراف", path: "/attendance", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
+  { icon: CalendarDays, label: "الورديات", path: "/shifts", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
+  { icon: ReceiptText, label: "الإجازات", path: "/leaves", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
+  { icon: BarChart3, label: "مؤشرات الأداء", path: "/kpis", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
+  { icon: WalletCards, label: "الرواتب", path: "/payroll", roles: ["owner", "manager"] as AppRole[] },
 ];
 
-const SIDEBAR_WIDTH_KEY = "sidebar-width";
-const DEFAULT_WIDTH = 280;
-const MIN_WIDTH = 200;
-const MAX_WIDTH = 480;
+const roleLabels: Record<AppRole, string> = {
+  owner: "مالك النظام",
+  manager: "مدير الفرع",
+  pharmacist: "صيدلاني",
+  employee: "موظف",
+};
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-    return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
-  });
-  const { loading, user } = useAuth();
+function normalizeRole(role?: string): AppRole {
+  if (role === "admin" || role === "owner") return "owner";
+  if (role === "manager" || role === "pharmacist") return role;
+  return "employee";
+}
 
-  useEffect(() => {
-    localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
-  }, [sidebarWidth]);
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const { loading, user, logout } = useAuth();
+  const [location, setLocation] = useLocation();
 
-  if (loading) {
-    return <DashboardLayoutSkeleton />
-  }
+  if (loading) return <DashboardLayoutSkeleton />;
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
-          <div className="flex flex-col items-center gap-6">
-            <h1 className="text-2xl font-semibold tracking-tight text-center">
-              Sign in to continue
-            </h1>
-            <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Access to this dashboard requires authentication. Continue to launch the login flow.
-            </p>
+      <div dir="rtl" className="min-h-screen bg-[#f4f7f5] px-5 py-10 flex items-center justify-center">
+        <div className="w-full max-w-md rounded-[2rem] border border-[#dce9e2] bg-white p-8 text-center shadow-[0_24px_64px_-36px_rgba(15,118,110,.48)]">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-3xl bg-[#0f766e] text-white shadow-lg shadow-[#0f766e]/20">
+            <Pill className="h-8 w-8" />
           </div>
-          <Button
-            onClick={() => startLogin()}
-            size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all"
-          >
-            Sign in
-          </Button>
+          <Badge className="mb-4 border-0 bg-[#e6f5ef] text-[#0f766e] hover:bg-[#e6f5ef]">نظام آمن ومخصص لفريق الصيدلية</Badge>
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#17344a]">سجّل الدخول للمتابعة</h1>
+          <p className="mt-3 leading-7 text-sm text-slate-500">تحتاج إلى حساب مُصرّح به للوصول إلى بيانات الموظفين والرواتب والأداء.</p>
+          <Button onClick={() => startLogin()} className="mt-8 h-12 w-full rounded-2xl bg-[#0f766e] text-base font-bold hover:bg-[#0b5c56]">تسجيل الدخول الآمن</Button>
         </div>
       </div>
     );
   }
 
-  return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": `${sidebarWidth}px`,
-        } as CSSProperties
-      }
-    >
-      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
-        {children}
-      </DashboardLayoutContent>
-    </SidebarProvider>
-  );
-}
-
-type DashboardLayoutContentProps = {
-  children: React.ReactNode;
-  setSidebarWidth: (width: number) => void;
-};
-
-function DashboardLayoutContent({
-  children,
-  setSidebarWidth,
-}: DashboardLayoutContentProps) {
-  const { user, logout } = useAuth();
-  const [location, setLocation] = useLocation();
-  const { state, toggleSidebar } = useSidebar();
-  const isCollapsed = state === "collapsed";
-  const [isResizing, setIsResizing] = useState(false);
-  const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => item.path === location);
-  const isMobile = useIsMobile();
-
-  useEffect(() => {
-    if (isCollapsed) {
-      setIsResizing(false);
-    }
-  }, [isCollapsed]);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return;
-
-      const sidebarLeft = sidebarRef.current?.getBoundingClientRect().left ?? 0;
-      const newWidth = e.clientX - sidebarLeft;
-      if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
-        setSidebarWidth(newWidth);
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    if (isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-    }
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [isResizing, setSidebarWidth]);
+  const role = normalizeRole(user.role);
+  const navigation = allNavigation.filter(item => item.roles.includes(role));
+  const activeItem = navigation.find(item => item.path === location) ?? navigation[0];
+  const initials = user.name?.trim().slice(0, 2).toUpperCase() || "PH";
 
   return (
-    <>
-      <div className="relative" ref={sidebarRef}>
-        <Sidebar
-          collapsible="icon"
-          className="border-r-0"
-          disableTransition={isResizing}
-        >
-          <SidebarHeader className="h-16 justify-center">
-            <div className="flex items-center gap-3 px-2 transition-all w-full">
-              <button
-                onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
-                aria-label="Toggle navigation"
-              >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
-              </button>
-              {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-semibold tracking-tight truncate">
-                    Navigation
-                  </span>
-                </div>
-              ) : null}
-            </div>
+    <div dir="rtl" className="min-h-screen bg-[#f4f7f5] text-[#17344a]">
+      <SidebarProvider defaultOpen>
+        <Sidebar side="right" collapsible="icon" className="border-l border-[#dbe9e2] border-r-0 bg-[#fbfdfc]">
+          <SidebarHeader className="px-4 pt-5 pb-5">
+            <button onClick={() => setLocation("/")} className="flex w-full items-center gap-3 rounded-2xl px-2 text-right outline-none focus-visible:ring-2 focus-visible:ring-[#0f766e]">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-[#0f766e] text-white shadow-lg shadow-[#0f766e]/20">
+                <Pill className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+                <p className="text-base font-extrabold leading-none tracking-tight">نِظام</p>
+                <p className="mt-1.5 text-[11px] font-semibold tracking-[.16em] text-[#0f766e]">PHARMACY PEOPLE</p>
+              </div>
+            </button>
           </SidebarHeader>
 
-          <SidebarContent className="gap-0">
-            <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
+          <SidebarContent className="px-3">
+            <div className="mb-3 px-3 text-[10px] font-bold tracking-[.18em] text-slate-400 group-data-[collapsible=icon]:hidden">مساحة العمل</div>
+            <SidebarMenu className="gap-1">
+              {navigation.map(item => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
                       isActive={isActive}
-                      onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
+                      onClick={() => setLocation(item.path)}
+                      className={`h-11 rounded-xl px-3 text-sm font-semibold transition-all ${isActive ? "bg-[#0f766e] text-white hover:bg-[#0f766e] hover:text-white" : "text-slate-500 hover:bg-[#eaf4ef] hover:text-[#0f766e]"}`}
                     >
-                      <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
-                      />
+                      <item.icon className="h-[18px] w-[18px]" />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
               })}
             </SidebarMenu>
+
+            <div className="mx-2 mt-8 rounded-2xl bg-[#17344a] p-4 text-white group-data-[collapsible=icon]:hidden">
+              <div className="flex items-center gap-2 text-[#9ee4c9]"><Sparkles className="h-4 w-4" /><span className="text-xs font-bold">مساحة منظمة</span></div>
+              <p className="mt-2 text-xs leading-5 text-slate-300">كل بيانات فريقك وعملياتك في لوحة واحدة آمنة.</p>
+            </div>
           </SidebarContent>
 
           <SidebarFooter className="p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <Avatar className="h-9 w-9 border shrink-0">
-                    <AvatarFallback className="text-xs font-medium">
-                      {user?.name?.charAt(0).toUpperCase()}
-                    </AvatarFallback>
+                <button className="flex w-full items-center gap-3 rounded-2xl border border-[#e1ece6] bg-white p-2.5 text-right outline-none transition hover:border-[#b9d8ca] focus-visible:ring-2 focus-visible:ring-[#0f766e]">
+                  <Avatar className="h-9 w-9 border border-[#cde1d7]">
+                    <AvatarFallback className="bg-[#e6f5ef] text-xs font-extrabold text-[#0f766e]">{initials}</AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                    <p className="text-sm font-medium truncate leading-none">
-                      {user?.name || "-"}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate mt-1.5">
-                      {user?.email || "-"}
-                    </p>
+                  <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+                    <p className="truncate text-sm font-bold text-[#17344a]">{user.name || "حساب الصيدلية"}</p>
+                    <p className="mt-0.5 text-[11px] font-medium text-slate-400">{roleLabels[role]}</p>
                   </div>
+                  <ChevronLeft className="h-4 w-4 text-slate-400 group-data-[collapsible=icon]:hidden" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem
-                  onClick={logout}
-                  className="cursor-pointer text-destructive focus:text-destructive"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign out</span>
-                </DropdownMenuItem>
+              <DropdownMenuContent align="start" className="w-52 rounded-xl">
+                <DropdownMenuLabel className="text-right text-xs text-slate-500">الحساب والإعدادات</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={logout} className="cursor-pointer gap-2 text-destructive focus:text-destructive"><LogOut className="h-4 w-4" />تسجيل الخروج</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarFooter>
         </Sidebar>
-        <div
-          className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
-          onMouseDown={() => {
-            if (isCollapsed) return;
-            setIsResizing(true);
-          }}
-          style={{ zIndex: 50 }}
-        />
-      </div>
 
-      <SidebarInset>
-        {isMobile && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col gap-1">
-                  <span className="tracking-tight text-foreground">
-                    {activeMenuItem?.label ?? "Menu"}
-                  </span>
-                </div>
+        <SidebarInset className="bg-[#f4f7f5]">
+          <header className="sticky top-0 z-20 flex h-[74px] items-center justify-between border-b border-[#e1ece6] bg-[#f4f7f5]/90 px-4 backdrop-blur-xl md:px-8">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="h-10 w-10 rounded-xl border border-[#dbe9e2] bg-white text-[#17344a] hover:bg-[#eaf4ef]" />
+              <div>
+                <p className="text-[11px] font-bold tracking-[.12em] text-[#0f766e]">{roleLabels[role]}</p>
+                <h1 className="text-lg font-extrabold tracking-tight text-[#17344a]">{activeItem?.label || "نظام الصيدلية"}</h1>
               </div>
             </div>
-          </div>
-        )}
-        <main className="flex-1 p-4">{children}</main>
-      </SidebarInset>
-    </>
+            <div className="hidden items-center gap-2 sm:flex">
+              <div className="flex h-9 items-center gap-2 rounded-full border border-[#dbe9e2] bg-white px-3 text-xs font-semibold text-slate-500"><ShieldCheck className="h-4 w-4 text-[#0f766e]" />بيانات محمية</div>
+              <div className="h-9 rounded-full bg-[#e6f5ef] px-3.5 flex items-center text-xs font-bold text-[#0f766e]">اليوم</div>
+            </div>
+          </header>
+          <main className="mx-auto w-full max-w-[1600px] p-4 md:p-8">{children}</main>
+        </SidebarInset>
+      </SidebarProvider>
+    </div>
   );
 }

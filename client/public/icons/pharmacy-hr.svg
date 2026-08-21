@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>نِظام موارد الصيدلية</title>
+  <rect width="512" height="512" rx="112" fill="#0f766e"/>
+  <path d="M170 128h172a42 42 0 0 1 0 84h-20v88c0 47-38 84-84 84h-16c-47 0-84-37-84-84v-88h-20a42 42 0 0 1 0-84h52z" fill="#f8fcfa"/>
+  <path d="M226 162h60v58h58v60h-58v58h-60v-58h-58v-60h58z" fill="#0f766e"/>
+  <circle cx="387" cy="387" r="59" fill="#9ee4c9"/>
+  <path d="M359 387h56M387 359v56" stroke="#17344a" stroke-width="16" stroke-linecap="round"/>
+</svg>
