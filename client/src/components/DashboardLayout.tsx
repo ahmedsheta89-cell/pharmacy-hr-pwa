@@ -34,6 +34,7 @@ import {
   ReceiptText,
   ShieldCheck,
   Sparkles,
+  ClipboardCheck,
   UsersRound,
   WalletCards,
 } from "lucide-react";
@@ -50,6 +51,7 @@ export const allNavigation = [
   { icon: ReceiptText, label: "الإجازات", path: "/leaves", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: BarChart3, label: "مؤشرات الأداء", path: "/kpis", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: WalletCards, label: "الرواتب", path: "/payroll", roles: ["owner", "manager"] as AppRole[] },
+  { icon: ClipboardCheck, label: "سيناريوهات الاعتماد", path: "/scenarios", roles: ["owner"] as AppRole[] },
 ];
 
 const roleLabels: Record<AppRole, string> = {

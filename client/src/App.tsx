@@ -9,13 +9,14 @@ import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
 
 const ModulePage = lazy(() => import("./pages/ModulePage"));
+const RoleScenarios = lazy(() => import("./pages/RoleScenarios"));
 
 function ProtectedModule({ module }: { module: "employees" | "attendance" | "shifts" | "leaves" | "kpis" | "payroll" }) {
   return <DashboardLayout><Suspense fallback={<div className="grid min-h-72 place-items-center text-sm font-bold text-[#0f766e]">جارٍ تحميل مساحة العمل…</div>}><ModulePage module={module} /></Suspense></DashboardLayout>;
 }
 
 function Router() {
-  return <Switch><Route path="/" component={Home} /><Route path="/employees">{() => <ProtectedModule module="employees" />}</Route><Route path="/attendance">{() => <ProtectedModule module="attendance" />}</Route><Route path="/shifts">{() => <ProtectedModule module="shifts" />}</Route><Route path="/leaves">{() => <ProtectedModule module="leaves" />}</Route><Route path="/kpis">{() => <ProtectedModule module="kpis" />}</Route><Route path="/payroll">{() => <ProtectedModule module="payroll" />}</Route><Route path="/404" component={NotFound} /><Route component={NotFound} /></Switch>;
+  return <Switch><Route path="/" component={Home} /><Route path="/employees">{() => <ProtectedModule module="employees" />}</Route><Route path="/attendance">{() => <ProtectedModule module="attendance" />}</Route><Route path="/shifts">{() => <ProtectedModule module="shifts" />}</Route><Route path="/leaves">{() => <ProtectedModule module="leaves" />}</Route><Route path="/kpis">{() => <ProtectedModule module="kpis" />}</Route><Route path="/payroll">{() => <ProtectedModule module="payroll" />}</Route><Route path="/scenarios">{() => <Suspense fallback={<div className="grid min-h-72 place-items-center text-sm font-bold text-[#0f766e]">جارٍ تحميل سيناريوهات الاختبار…</div>}><RoleScenarios /></Suspense>}</Route><Route path="/404" component={NotFound} /><Route component={NotFound} /></Switch>;
 }
 
 export default function App() {

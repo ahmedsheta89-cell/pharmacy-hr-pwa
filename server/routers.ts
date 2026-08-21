@@ -17,7 +17,10 @@ import {
   shifts,
 } from "../drizzle/schema";
 import { calculateKpiScore, calculatePayroll } from "../shared/hr-calculations";
+import { createAttendanceQrToken, verifyAttendanceQrToken } from "../shared/attendance-qr";
+import { AttendanceQrWorkflowError, recordCheckInByQr, recordCheckOutByQr } from "./attendance-qr-workflow";
 import { getDb, getEmployeeByUserId } from "./db";
+import { ENV } from "./_core/env";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -67,6 +70,23 @@ async function requireEmployeeProfile(userId: number) {
   const employee = await getEmployeeByUserId(userId);
   if (!employee) throw new TRPCError({ code: "FORBIDDEN", message: "لم يُربط حسابك بعد بملف موظف." });
   return employee;
+}
+
+function attendanceQrRepository(db: Awaited<ReturnType<typeof requireDb>>) {
+  return {
+    getEmployeeProfile: async (userId: number) => (await getEmployeeByUserId(userId)) ?? null,
+    findTodayRecord: async (employeeId: number, workDate: Date) => (await db.select().from(attendanceRecords).where(and(eq(attendanceRecords.employeeId, employeeId), eq(attendanceRecords.workDate, workDate))).limit(1))[0] ?? null,
+    findTodayAssignment: async (employeeId: number, workDate: Date) => (await db.select({ assignmentId: shiftAssignments.id, startTime: shifts.startTime, graceMinutes: shifts.graceMinutes }).from(shiftAssignments).innerJoin(shifts, eq(shiftAssignments.shiftId, shifts.id)).where(and(eq(shiftAssignments.employeeId, employeeId), eq(shiftAssignments.workDate, workDate))).limit(1))[0] ?? null,
+    createRecord: async (values: { employeeId: number; shiftAssignmentId: number | null; workDate: Date; checkInAt: Date; lateMinutes: number; status: "present" | "late" }) => {
+      await db.insert(attendanceRecords).values(values);
+    },
+    updateCheckIn: async (recordId: number, values: { shiftAssignmentId: number | null; checkInAt: Date; lateMinutes: number; status: "present" | "late" }) => {
+      await db.update(attendanceRecords).set(values).where(eq(attendanceRecords.id, recordId));
+    },
+    updateCheckOut: async (recordId: number, values: { checkOutAt: Date; workedMinutes: number }) => {
+      await db.update(attendanceRecords).set(values).where(eq(attendanceRecords.id, recordId));
+    },
+  };
 }
 
 async function assertBranchScope(user: { id: number; role: string }, branchId: number) {
@@ -268,6 +288,11 @@ export const appRouter = router({
   }),
 
   attendance: router({
+    issueQr: managerProcedure.input(z.object({ branchId: z.number().int().positive(), action: z.enum(["check_in", "check_out"]) })).mutation(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const { token, expiresAt } = await createAttendanceQrToken({ branchId: input.branchId, action: input.action }, ENV.cookieSecret);
+      return { token, expiresAt };
+    }),
     mineToday: protectedProcedure.query(async ({ ctx }) => {
       const db = await requireDb();
       const employee = await requireEmployeeProfile(ctx.user.id);
@@ -303,6 +328,22 @@ export const appRouter = router({
       const workedMinutes = Math.max(0, Math.floor((now.getTime() - record.checkInAt.getTime()) / 60000));
       await db.update(attendanceRecords).set({ checkOutAt: now, workedMinutes }).where(eq(attendanceRecords.id, record.id));
       return { success: true, workedMinutes };
+    }),
+    checkInByQr: protectedProcedure.input(z.object({ token: z.string().min(24).max(4096) })).mutation(async ({ ctx, input }) => {
+      try {
+        return await recordCheckInByQr({ token: input.token, userId: ctx.user.id, verify: token => verifyAttendanceQrToken(token, ENV.cookieSecret), repository: attendanceQrRepository(await requireDb()) });
+      } catch (error) {
+        if (error instanceof AttendanceQrWorkflowError) throw new TRPCError({ code: error.code, message: error.message });
+        throw error;
+      }
+    }),
+    checkOutByQr: protectedProcedure.input(z.object({ token: z.string().min(24).max(4096) })).mutation(async ({ ctx, input }) => {
+      try {
+        return await recordCheckOutByQr({ token: input.token, userId: ctx.user.id, verify: token => verifyAttendanceQrToken(token, ENV.cookieSecret), repository: attendanceQrRepository(await requireDb()) });
+      } catch (error) {
+        if (error instanceof AttendanceQrWorkflowError) throw new TRPCError({ code: error.code, message: error.message });
+        throw error;
+      }
     }),
     teamToday: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
       await assertBranchScope(ctx.user, input.branchId);
@@ -426,6 +467,14 @@ export const appRouter = router({
       await assertBranchScope(ctx.user, input.branchId);
       const db = await requireDb();
       return db.select().from(payrollRuns).where(eq(payrollRuns.branchId, input.branchId)).orderBy(desc(payrollRuns.year), desc(payrollRuns.month));
+    }),
+    exportData: managerProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
+      await assertBranchScope(ctx.user, run.branchId);
+      const rows = await db.select({ item: payrollItems, employee: employees }).from(payrollItems).innerJoin(employees, eq(payrollItems.employeeId, employees.id)).where(eq(payrollItems.payrollRunId, run.id)).orderBy(asc(employees.fullName));
+      return { run, rows: rows.map(({ item, employee }) => ({ employeeCode: employee.employeeCode, employeeName: employee.fullName, jobTitle: employee.jobTitle, basicSalary: toNumber(item.basicSalary), allowances: toNumber(item.totalAllowances), kpiBonus: toNumber(item.kpiBonus), lateDeduction: toNumber(item.lateDeduction), absenceDeduction: toNumber(item.absenceDeduction), leaveDeduction: toNumber(item.leaveDeduction), netSalary: toNumber(item.netSalary) })) };
     }),
   }),
 });
