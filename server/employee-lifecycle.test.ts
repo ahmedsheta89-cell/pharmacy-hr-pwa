@@ -22,7 +22,7 @@ const fixture = vi.hoisted(() => {
     linkedEmployee: { id: 2, branchId: 1 },
     db: {
       select: () => ({ from: () => {
-        const joined = { innerJoin: () => joined, where: () => query(), orderBy: () => ({ then: (resolve: (value: typeof auditRows) => unknown) => Promise.resolve(auditRows).then(resolve) }) };
+        const joined = { innerJoin: () => joined, leftJoin: () => joined, where: () => query(), orderBy: () => ({ then: (resolve: (value: typeof auditRows) => unknown) => Promise.resolve(auditRows).then(resolve) }) };
         return { where: () => query(), innerJoin: () => joined };
       } }),
       update: () => ({ set: (values: Record<string, unknown>) => ({ where: async () => { updated.push(values); } }) }),
@@ -80,6 +80,14 @@ describe("دورة حياة الموظف", () => {
     await expect(appRouter.createCaller(context("owner")).employees.auditLog({ employeeId: 7 })).resolves.toMatchObject([{ id: 31, action: "updated" }]);
     await expect(appRouter.createCaller(context("manager")).employees.auditLog({ employeeId: 7 })).resolves.toMatchObject([{ id: 31, action: "updated" }]);
     await expect(appRouter.createCaller(context("employee")).employees.auditLog({ employeeId: 7 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("يصفّي سجل التدقيق بالبحث داخل الحقول المتغيرة مع بقاء نطاق الموظف مفروضاً", async () => {
+    fixture.auditRows.splice(0, fixture.auditRows.length,
+      { id: 41, employeeId: 7, action: "updated", actorName: "المالك", changes: [{ label: "المسمى الوظيفي", before: "مساعد", after: "صيدلاني" }], createdAt: new Date("2026-08-22T09:00:00Z") },
+      { id: 42, employeeId: 7, action: "archived", actorName: "المالك", changes: [{ label: "الحالة", before: "نشط", after: "مؤرشف" }], createdAt: new Date("2026-08-23T09:00:00Z") },
+    );
+    await expect(appRouter.createCaller(context("manager")).employees.auditLog({ employeeId: 7, action: "updated", search: "صيدلاني" })).resolves.toMatchObject([{ id: 41, action: "updated" }]);
   });
 
   it("يسمح للمالك بإنشاء ملفه الوظيفي وربط حسابه قبل تسجيل الحضور", async () => {
@@ -151,13 +159,22 @@ describe("دورة حياة الموظف", () => {
   });
 
   it("يعرض سجل عمليات الربط للنطاق الإداري ويتيح قراءة الإشعارات الشخصية", async () => {
-    fixture.auditRows.splice(0, fixture.auditRows.length, { log: { id: 61, employeeId: 7, branchId: 1, action: "linked", actorName: "اختبار", createdAt: new Date() }, employeeName: "إبراهيم", employeeCode: "13" });
+    fixture.auditRows.splice(0, fixture.auditRows.length, { log: { id: 61, employeeId: 7, branchId: 1, action: "linked", source: "owner_direct", actorName: "اختبار", createdAt: new Date() }, employeeName: "إبراهيم", employeeCode: "13", accountName: "سارة", accountEmail: "sara@example.com" });
     await expect(appRouter.createCaller(context("manager")).employees.linkHistory()).resolves.toMatchObject([{ employeeName: "إبراهيم", log: { action: "linked" } }]);
     fixture.auditRows.splice(0, fixture.auditRows.length, { id: 71, userId: 1, title: "تم ربط حسابك الوظيفي", body: "تم الربط", readAt: null, createdAt: new Date() });
     await expect(appRouter.createCaller(context("owner")).notifications.mine()).resolves.toMatchObject([{ id: 71, title: "تم ربط حسابك الوظيفي" }]);
     fixture.selectResults.push([{ id: 71, userId: 1, readAt: null }]);
     await expect(appRouter.createCaller(context("owner")).notifications.markRead({ notificationId: 71 })).resolves.toEqual({ success: true });
     expect(fixture.updated).toEqual(expect.arrayContaining([expect.objectContaining({ readAt: expect.any(Date) })]));
+  });
+
+  it("يبحث سجل الربط داخل النتائج المصرح بها ويمنع المدير من اختيار فرع خارج نطاقه", async () => {
+    fixture.auditRows.splice(0, fixture.auditRows.length,
+      { log: { id: 81, employeeId: 7, branchId: 1, action: "linked", source: "owner_direct", actorName: "اختبار", createdAt: new Date() }, employeeName: "إبراهيم", employeeCode: "13", accountName: "سارة", accountEmail: "sara@example.com" },
+      { log: { id: 82, employeeId: 7, branchId: 1, action: "unlinked", source: "owner_direct", actorName: "اختبار", createdAt: new Date() }, employeeName: "إبراهيم", employeeCode: "13", accountName: "مروان", accountEmail: "marwan@example.com" },
+    );
+    await expect(appRouter.createCaller(context("manager")).employees.linkHistory({ search: "سارة", action: "linked", source: "owner_direct" })).resolves.toMatchObject([{ accountName: "سارة", log: { action: "linked" } }]);
+    await expect(appRouter.createCaller(context("manager")).employees.linkHistory({ branchId: 2 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("يرسل المدير المسير لاعتماد المدير ثم يحيله لمدير الموارد البشرية مع تسجيل القرار", async () => {

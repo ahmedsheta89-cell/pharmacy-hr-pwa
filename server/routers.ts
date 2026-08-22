@@ -366,11 +366,37 @@ export const appRouter = router({
       await db.insert(notifications).values({ userId: request.userId, type: "account_linked", title: "تم ربط حسابك الوظيفي", body: `اعتمد المالك طلب ربط حسابك بملفك الوظيفي: ${employee.fullName}.`, data: { employeeId: employee.id, requestId: request.id } });
       return { success: true, status: "approved" as const };
     }),
-    linkHistory: managerProcedure.input(z.object({ employeeId: z.number().int().positive().optional() }).optional()).query(async ({ ctx, input }) => {
+    linkHistory: managerProcedure.input(z.object({
+      branchId: z.number().int().positive().optional(),
+      employeeId: z.number().int().positive().optional(),
+      action: z.enum(["linked", "unlinked"]).optional(),
+      source: z.enum(["owner_direct", "owner_approved_request", "owner_self_setup"]).optional(),
+      search: z.string().trim().max(120).optional(),
+      from: z.coerce.date().optional(),
+      to: z.coerce.date().optional(),
+    }).optional()).query(async ({ ctx, input }) => {
       const db = await requireDb();
-      const records = await db.select({ log: accountLinkLogs, employeeName: employees.fullName, employeeCode: employees.employeeCode }).from(accountLinkLogs).innerJoin(employees, eq(accountLinkLogs.employeeId, employees.id)).orderBy(desc(accountLinkLogs.createdAt));
-      const manager = hasRole(ctx.user.role, ownerRoles) ? null : await requireEmployeeProfile(ctx.user.id);
-      return records.filter(record => (!manager || record.log.branchId === manager.branchId) && (!input?.employeeId || record.log.employeeId === input.employeeId));
+      const isOwner = hasRole(ctx.user.role, ownerRoles);
+      if (input?.branchId) await assertBranchScope(ctx.user, input.branchId);
+      const manager = isOwner ? null : await requireEmployeeProfile(ctx.user.id);
+      const scopedBranchId = input?.branchId ?? manager?.branchId;
+      const conditions = [];
+      if (scopedBranchId) conditions.push(eq(accountLinkLogs.branchId, scopedBranchId));
+      if (input?.employeeId) conditions.push(eq(accountLinkLogs.employeeId, input.employeeId));
+      if (input?.action) conditions.push(eq(accountLinkLogs.action, input.action));
+      if (input?.source) conditions.push(eq(accountLinkLogs.source, input.source));
+      if (input?.from) conditions.push(gte(accountLinkLogs.createdAt, startOfDay(input.from)));
+      if (input?.to) conditions.push(lte(accountLinkLogs.createdAt, endOfDay(input.to)));
+      const records = await db.select({ log: accountLinkLogs, employeeName: employees.fullName, employeeCode: employees.employeeCode, accountName: users.name, accountEmail: users.email })
+        .from(accountLinkLogs)
+        .innerJoin(employees, eq(accountLinkLogs.employeeId, employees.id))
+        .leftJoin(users, eq(accountLinkLogs.userId, users.id))
+        .where(conditions.length ? and(...conditions) : undefined)
+        .orderBy(desc(accountLinkLogs.createdAt));
+      const search = input?.search?.toLocaleLowerCase("ar-EG");
+      if (!search) return records;
+      return records.filter(record => [record.employeeName, record.employeeCode, record.accountName, record.accountEmail, record.log.actorName]
+        .some(value => value?.toLocaleLowerCase("ar-EG").includes(search)));
     }),
     create: managerProcedure.input(z.object({
       branchId: z.number().int().positive(), employeeCode: z.string().trim().min(2).max(32), fullName: z.string().trim().min(3).max(160), phone: z.string().trim().max(32).optional(), email: z.string().email().optional(), jobTitle: z.string().trim().min(2).max(120), role: z.enum(staffRoles), hireDate: z.coerce.date(), nationalId: z.string().trim().max(48).optional(),
@@ -416,12 +442,26 @@ export const appRouter = router({
       await db.insert(employeeAuditLogs).values({ employeeId: input.employeeId, branchId: employee.branchId, actorUserId: ctx.user.id, actorName: ctx.user.name ?? null, action: "restored", changes: [{ field: "employmentStatus", label: "حالة الملف", before: auditValue("employmentStatus", employee.employmentStatus), after: "active" }] });
       return { success: true };
     }),
-    auditLog: managerProcedure.input(z.object({ employeeId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+    auditLog: managerProcedure.input(z.object({
+      employeeId: z.number().int().positive(),
+      action: z.enum(["created", "updated", "archived", "restored"]).optional(),
+      search: z.string().trim().max(120).optional(),
+      from: z.coerce.date().optional(),
+      to: z.coerce.date().optional(),
+    })).query(async ({ ctx, input }) => {
       const db = await requireDb();
       const employee = (await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
       if (!employee) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على ملف الموظف." });
       await assertBranchScope(ctx.user, employee.branchId);
-      return db.select().from(employeeAuditLogs).where(eq(employeeAuditLogs.employeeId, input.employeeId)).orderBy(desc(employeeAuditLogs.createdAt));
+      const conditions = [eq(employeeAuditLogs.employeeId, input.employeeId)];
+      if (input.action) conditions.push(eq(employeeAuditLogs.action, input.action));
+      if (input.from) conditions.push(gte(employeeAuditLogs.createdAt, startOfDay(input.from)));
+      if (input.to) conditions.push(lte(employeeAuditLogs.createdAt, endOfDay(input.to)));
+      const records = await db.select().from(employeeAuditLogs).where(and(...conditions)).orderBy(desc(employeeAuditLogs.createdAt));
+      const search = input.search?.toLocaleLowerCase("ar-EG");
+      if (!search) return records;
+      return records.filter(record => [record.action, record.actorName, ...record.changes.flatMap(change => [change.label, change.before, change.after])]
+        .some(value => value?.toLocaleLowerCase("ar-EG").includes(search)));
     }),
   }),
 
