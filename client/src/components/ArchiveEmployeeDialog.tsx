@@ -1,0 +1,6 @@
+import React from "react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+
+export function ArchiveEmployeeDialog({ employee, pending, error, onArchive, onClose }: { employee: { id: number; fullName: string } | null; pending: boolean; error?: string | null; onArchive: (employeeId: number) => void; onClose: () => void }) {
+  return <AlertDialog open={Boolean(employee)} onOpenChange={open => { if (!open) onClose(); }}><AlertDialogContent dir="rtl"><AlertDialogHeader><AlertDialogTitle>أرشفة ملف الموظف</AlertDialogTitle><AlertDialogDescription>سيُخفى ملف {employee?.fullName} من القوائم التشغيلية، مع بقاء سجلاته السابقة محفوظة. لا يمكن استعادة العرض من هذه الواجهة حالياً.</AlertDialogDescription></AlertDialogHeader>{error ? <p role="alert" className="rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{error}</p> : null}<AlertDialogFooter><AlertDialogCancel disabled={pending}>إلغاء</AlertDialogCancel><AlertDialogAction disabled={pending} onClick={() => employee && onArchive(employee.id)} className="bg-red-700 hover:bg-red-800">{pending ? "جارٍ الأرشفة..." : "تأكيد الأرشفة"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>;
+}

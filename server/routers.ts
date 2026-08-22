@@ -192,15 +192,16 @@ export const appRouter = router({
   }),
 
   employees: router({
-    list: managerProcedure.input(z.object({ branchId: z.number().int().positive().optional() }).optional()).query(async ({ ctx, input }) => {
+    list: managerProcedure.input(z.object({ branchId: z.number().int().positive().optional(), includeArchived: z.boolean().optional() }).optional()).query(async ({ ctx, input }) => {
       const db = await requireDb();
       const requestedBranchId = input?.branchId;
       if (requestedBranchId) await assertBranchScope(ctx.user, requestedBranchId);
       if (hasRole(ctx.user.role, ownerRoles)) {
-        return requestedBranchId ? db.select().from(employees).where(eq(employees.branchId, requestedBranchId)).orderBy(asc(employees.fullName)) : db.select().from(employees).orderBy(asc(employees.fullName));
+        if (requestedBranchId) return db.select().from(employees).where(input?.includeArchived ? eq(employees.branchId, requestedBranchId) : and(eq(employees.branchId, requestedBranchId), eq(employees.employmentStatus, "active"))).orderBy(asc(employees.fullName));
+        return db.select().from(employees).where(input?.includeArchived ? undefined : eq(employees.employmentStatus, "active")).orderBy(asc(employees.fullName));
       }
       const manager = await requireEmployeeProfile(ctx.user.id);
-      return db.select().from(employees).where(eq(employees.branchId, manager.branchId)).orderBy(asc(employees.fullName));
+      return db.select().from(employees).where(input?.includeArchived ? eq(employees.branchId, manager.branchId) : and(eq(employees.branchId, manager.branchId), eq(employees.employmentStatus, "active"))).orderBy(asc(employees.fullName));
     }),
     create: managerProcedure.input(z.object({
       branchId: z.number().int().positive(), employeeCode: z.string().trim().min(2).max(32), fullName: z.string().trim().min(3).max(160), phone: z.string().trim().max(32).optional(), email: z.string().email().optional(), jobTitle: z.string().trim().min(2).max(120), role: z.enum(staffRoles), hireDate: z.coerce.date(), nationalId: z.string().trim().max(48).optional(),
@@ -208,6 +209,29 @@ export const appRouter = router({
       await assertBranchScope(ctx.user, input.branchId);
       const db = await requireDb();
       await db.insert(employees).values({ ...input, phone: input.phone || null, email: input.email || null, nationalId: input.nationalId || null });
+      return { success: true };
+    }),
+    update: managerProcedure.input(z.object({
+      employeeId: z.number().int().positive(), employeeCode: z.string().trim().min(2).max(32), fullName: z.string().trim().min(3).max(160), phone: z.string().trim().max(32).optional(), email: z.string().email().optional(), jobTitle: z.string().trim().min(2).max(120), role: z.enum(staffRoles), hireDate: z.coerce.date(), nationalId: z.string().trim().max(48).optional(),
+    })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const employee = (await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
+      if (!employee) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على ملف الموظف." });
+      await assertBranchScope(ctx.user, employee.branchId);
+      try {
+        await db.update(employees).set({ employeeCode: input.employeeCode, fullName: input.fullName, phone: input.phone || null, email: input.email || null, jobTitle: input.jobTitle, role: input.role, hireDate: input.hireDate, nationalId: input.nationalId || null }).where(eq(employees.id, input.employeeId));
+      } catch {
+        throw new TRPCError({ code: "CONFLICT", message: "تعذر حفظ التعديلات. تأكد من أن الكود الوظيفي غير مستخدم." });
+      }
+      return { success: true };
+    }),
+    archive: managerProcedure.input(z.object({ employeeId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const employee = (await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
+      if (!employee) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على ملف الموظف." });
+      await assertBranchScope(ctx.user, employee.branchId);
+      if (employee.userId === ctx.user.id && !hasRole(ctx.user.role, ownerRoles)) throw new TRPCError({ code: "BAD_REQUEST", message: "لا يمكنك أرشفة ملفك الشخصي." });
+      await db.update(employees).set({ employmentStatus: "inactive" }).where(eq(employees.id, input.employeeId));
       return { success: true };
     }),
   }),
