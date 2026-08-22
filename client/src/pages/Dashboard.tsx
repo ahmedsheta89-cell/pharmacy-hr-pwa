@@ -24,6 +24,8 @@ import {
   WalletCards,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useEffect } from "react";
+import { saveOfflineDashboardSnapshot } from "@/lib/offlineSnapshot";
 
 type AppRole = "owner" | "manager" | "pharmacist" | "employee";
 type Stat = { label: string; value: string; hint: string; icon: LucideIcon; tint: string };
@@ -159,6 +161,15 @@ export default function Dashboard() {
   const FocusIcon = config.focusIcon;
   const overviewQuery = trpc.dashboard.overview.useQuery(undefined, { retry: false });
   const dashboardStats = overviewQuery.data?.stats;
+
+  useEffect(() => {
+    if (user?.id == null || !dashboardStats?.length) return;
+    saveOfflineDashboardSnapshot(user.id, dashboardStats.map((stat, index) => ({
+      label: config.stats[index]?.label ?? "بيان أساسي",
+      value: stat.value,
+      hint: stat.hint,
+    })));
+  }, [config.stats, dashboardStats, user?.id]);
 
   return <div className="space-y-6" dir="rtl">
     <section className="relative overflow-hidden rounded-[1.75rem] bg-[#17344a] px-6 py-7 text-white shadow-[0_30px_60px_-36px_rgba(23,52,74,.72)] md:px-8 md:py-8"><div className="relative z-10 flex flex-col justify-between gap-7 lg:flex-row lg:items-end"><div className="max-w-2xl"><Badge className="border-0 bg-white/10 px-3 py-1 text-[#a7ebcf] hover:bg-white/10">{config.badge}</Badge><h2 className="mt-4 text-2xl font-extrabold tracking-tight md:text-3xl">{config.title}</h2><p className="mt-3 max-w-xl text-sm leading-7 text-slate-300">{config.description}</p></div><div className="flex flex-wrap gap-3"><Button onClick={() => setLocation(config.primaryPath)} className="h-11 rounded-xl bg-[#9ee4c9] px-5 font-bold text-[#123c35] hover:bg-[#c1efd9]"><Plus className="ml-2 h-4 w-4" />{config.primaryAction}</Button><Button variant="outline" onClick={() => setLocation(config.secondaryPath)} className="h-11 rounded-xl border-white/20 bg-white/5 px-5 font-bold text-white hover:bg-white/15 hover:text-white">{config.secondaryAction}</Button></div></div><div className="pointer-events-none absolute -ml-16 -mt-44 h-72 w-72 rounded-full bg-[#0f766e]/30 blur-3xl" /></section>

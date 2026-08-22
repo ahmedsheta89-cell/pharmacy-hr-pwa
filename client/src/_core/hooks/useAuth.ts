@@ -2,6 +2,7 @@ import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useEffect, useMemo } from "react";
+import { clearOfflineDashboardSnapshots } from "@/lib/offlineSnapshot";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -45,6 +46,7 @@ export function useAuth(options?: UseAuthOptions) {
       try {
         sessionStorage.removeItem("manus-cookie");
       } catch {}
+      clearOfflineDashboardSnapshots();
       utils.auth.me.setData(undefined, null);
       await utils.auth.me.invalidate();
     }

@@ -65,3 +65,8 @@ button, a, input, select, textarea { touch-action: manipulation; }
 .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .touch-target { min-width: 44px; min-height: 44px; }
 @media (max-width: 639px) { .mobile-content-safe { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px)); } }
+@media (prefers-reduced-motion: no-preference) {
+  .mobile-shortcut-button { transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1), background-color 180ms cubic-bezier(0.23, 1, 0.32, 1), color 180ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1); }
+  .mobile-shortcut-active { animation: mobile-shortcut-activate 180ms cubic-bezier(0.23, 1, 0.32, 1); }
+  @keyframes mobile-shortcut-activate { from { opacity: .72; transform: translateY(3px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+}

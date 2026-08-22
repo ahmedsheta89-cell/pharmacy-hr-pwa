@@ -18,12 +18,21 @@ const fixture = vi.hoisted(() => {
     auditEvents,
     auditRows,
     selectResults,
+    dashboardRows: new Map<unknown, Record<string, unknown>[]>(),
     employees: employeeRows,
     linkedEmployee: { id: 2, branchId: 1 },
-    db: {
-      select: () => ({ from: () => {
+      db: {
+      select: () => ({ from: (table: unknown) => {
+        if (fixture.dashboardRows.has(table)) {
+          const controlledRows = fixture.dashboardRows.get(table) ?? [];
+          const controlledOrdered = { limit: async () => controlledRows, then: (resolve: (value: typeof controlledRows) => unknown) => Promise.resolve(controlledRows).then(resolve) };
+          const controlledQuery = () => ({ limit: async () => controlledRows, then: (resolve: (value: typeof controlledRows) => unknown) => Promise.resolve(controlledRows).then(resolve), orderBy: () => controlledOrdered });
+          const controlledJoined = { innerJoin: () => controlledJoined, leftJoin: () => controlledJoined, where: () => controlledQuery(), orderBy: () => controlledOrdered };
+          return { where: () => controlledQuery(), innerJoin: () => controlledJoined, orderBy: () => controlledOrdered, then: (resolve: (value: typeof controlledRows) => unknown) => Promise.resolve(controlledRows).then(resolve) };
+        }
+        const rootOrdered = { limit: async () => auditRows, then: (resolve: (value: typeof auditRows) => unknown) => Promise.resolve(auditRows).then(resolve) };
         const joined = { innerJoin: () => joined, leftJoin: () => joined, where: () => query(), orderBy: () => ({ then: (resolve: (value: typeof auditRows) => unknown) => Promise.resolve(auditRows).then(resolve) }) };
-        return { where: () => query(), innerJoin: () => joined };
+        return { where: () => query(), innerJoin: () => joined, orderBy: () => rootOrdered, then: (resolve: (value: unknown) => unknown) => query().then(resolve) };
       } }),
       update: () => ({ set: (values: Record<string, unknown>) => ({ where: async () => { updated.push(values); } }) }),
       insert: () => ({ values: async (values: Record<string, unknown>) => { auditEvents.push(values); return [{ insertId: 44 }]; } }),
@@ -34,12 +43,43 @@ const fixture = vi.hoisted(() => {
 vi.mock("./db", () => ({ getDb: async () => fixture.db, getEmployeeByUserId: async () => fixture.linkedEmployee }));
 
 import { appRouter } from "./routers";
+import { accountLinkRequests, attendanceRecords, branches, employees, kpiRecords, leaveBalances, leaveRequests, payrollRuns, shiftAssignments } from "../drizzle/schema";
 
 function context(role: "owner" | "manager" | "hr_manager" | "employee"): TrpcContext {
   return { user: { id: 1, openId: `test-${role}`, name: "اختبار", email: "test@example.com", loginMethod: "test", role, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }, req: { protocol: "https", headers: {} } as TrpcContext["req"], res: { clearCookie: () => undefined } as TrpcContext["res"] };
 }
 
 describe("دورة حياة الموظف", () => {
+  it("يعيد عدّادات مهام المالك ومدير الفرع ومدير الموارد البشرية ضمن النطاق المصرح", async () => {
+    try {
+      fixture.dashboardRows.set(branches, [{ id: 1 }]);
+      fixture.dashboardRows.set(employees, [{ id: 7 }]);
+      fixture.dashboardRows.set(kpiRecords, []);
+      fixture.dashboardRows.set(accountLinkRequests, [{ id: 10 }]);
+      fixture.dashboardRows.set(leaveRequests, [{ id: 11 }, { id: 12 }]);
+      fixture.dashboardRows.set(payrollRuns, [{ id: 21, status: "pending_manager" }]);
+      await expect(appRouter.createCaller(context("owner")).dashboard.overview()).resolves.toMatchObject({ taskBadges: { accountLinks: 1, leaves: 2, payroll: 1 } });
+
+      fixture.dashboardRows.clear();
+      fixture.dashboardRows.set(employees, [{ ...fixture.employees[0], id: 7, branchId: 1 }]);
+      fixture.dashboardRows.set(attendanceRecords, []);
+      fixture.dashboardRows.set(shiftAssignments, []);
+      fixture.dashboardRows.set(leaveRequests, [{ employeeId: 7, status: "pending" }]);
+      fixture.dashboardRows.set(payrollRuns, [{ id: 31, status: "pending_manager" }, { id: 32, status: "pending_hr" }]);
+      await expect(appRouter.createCaller(context("manager")).dashboard.overview()).resolves.toMatchObject({ taskBadges: { accountLinks: 0, leaves: 1, payroll: 1 } });
+
+      fixture.dashboardRows.clear();
+      fixture.dashboardRows.set(shiftAssignments, []);
+      fixture.dashboardRows.set(attendanceRecords, []);
+      fixture.dashboardRows.set(leaveBalances, []);
+      fixture.dashboardRows.set(kpiRecords, []);
+      fixture.dashboardRows.set(payrollRuns, [{ id: 41, status: "pending_hr" }, { id: 42, status: "pending_manager" }]);
+      await expect(appRouter.createCaller(context("hr_manager")).dashboard.overview()).resolves.toMatchObject({ taskBadges: { accountLinks: 0, leaves: 0, payroll: 1 } });
+    } finally {
+      fixture.dashboardRows.clear();
+    }
+  });
+
   it("يسمح للمالك بتعديل بيانات الموظف", async () => {
     fixture.updated.length = 0;
     fixture.auditEvents.length = 0;

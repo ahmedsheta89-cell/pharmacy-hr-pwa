@@ -1,3 +1,4 @@
+import React from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -84,10 +85,35 @@ export function getMobileShortcutsForRole(role?: string) {
     .filter((item): item is typeof allowedNavigation[number] => Boolean(item));
 }
 
+export type MobileTaskBadges = { accountLinks: number; leaves: number; payroll: number };
+
+export function getMobileShortcutBadgeCount(path: string, unreadNotifications: number, taskBadges: MobileTaskBadges = { accountLinks: 0, leaves: 0, payroll: 0 }) {
+  if (path === "/") return Math.max(0, unreadNotifications) + Math.max(0, taskBadges.accountLinks);
+  if (path === "/leaves") return Math.max(0, taskBadges.leaves);
+  if (path === "/payroll") return Math.max(0, taskBadges.payroll);
+  return 0;
+}
+
+export function MobileShortcutNav({ role, location, onNavigate, unreadNotifications, taskBadges }: { role?: string; location: string; onNavigate: (path: string) => void; unreadNotifications: number; taskBadges?: MobileTaskBadges }) {
+  const mobileShortcuts = getMobileShortcutsForRole(role);
+  return <nav aria-label="اختصارات الهاتف" className="safe-area-bottom fixed inset-x-0 bottom-0 z-30 border-t border-[#dbe9e2] bg-white/95 px-2 pb-2 pt-2 shadow-[0_-12px_32px_-24px_rgba(23,52,74,.5)] backdrop-blur-xl sm:hidden">
+    <div className="mx-auto grid max-w-md grid-flow-col auto-cols-fr gap-1">
+      {mobileShortcuts.map(item => {
+        const isActive = location === item.path;
+        const badgeCount = getMobileShortcutBadgeCount(item.path, unreadNotifications, taskBadges);
+        const shortLabel = item.path === "/" ? "الرئيسية" : item.label;
+        const badgeKind = item.path === "/" ? "إشعارات أو مهام جديدة" : "مهام معلقة";
+        return <button key={item.path} type="button" onClick={() => onNavigate(item.path)} aria-current={isActive ? "page" : undefined} aria-label={badgeCount ? `${shortLabel}، ${badgeCount > 9 ? "أكثر من 9" : badgeCount} ${badgeKind}` : shortLabel} className={`mobile-shortcut-button touch-target relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-bold ${isActive ? "mobile-shortcut-active bg-[#e6f5ef] text-[#0f766e] shadow-[0_6px_16px_-12px_rgba(15,118,110,.8)]" : "text-slate-500 hover:bg-[#f2f8f5] hover:text-[#0f766e]"}`}><item.icon className="h-[18px] w-[18px]" />{badgeCount ? <span aria-hidden="true" className="absolute right-1 top-0 grid h-4 min-w-4 place-items-center rounded-full border-2 border-white bg-[#e25555] px-1 text-[9px] font-extrabold leading-none text-white shadow-sm">{badgeCount > 9 ? "9+" : badgeCount}</span> : null}<span className="max-w-full truncate">{shortLabel}</span></button>;
+      })}
+    </div>
+  </nav>;
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { loading, user, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const notificationsQuery = trpc.notifications.mine.useQuery(undefined, { enabled: Boolean(user) && !loading });
+  const dashboardOverviewQuery = trpc.dashboard.overview.useQuery(undefined, { enabled: Boolean(user) && !loading, staleTime: 30_000 });
   const markNotificationRead = trpc.notifications.markRead.useMutation({ onSuccess: () => notificationsQuery.refetch() });
 
   if (loading) return <DashboardLayoutSkeleton />;
@@ -111,9 +137,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const role = normalizeLayoutRole(user.role);
   const navigation = getNavigationForRole(user.role);
   const activeItem = navigation.find(item => item.path === location) ?? navigation[0];
-  const mobileShortcuts = getMobileShortcutsForRole(user.role);
   const initials = user.name?.trim().slice(0, 2).toUpperCase() || "PH";
   const unreadNotifications = (notificationsQuery.data ?? []).filter(notification => !notification.readAt).length;
+  const taskBadges = dashboardOverviewQuery.data?.taskBadges;
 
   return (
     <div dir="rtl" className="min-h-[100dvh] bg-[#f4f7f5] text-[#17344a]">
@@ -210,14 +236,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </header>
           <main className="mobile-content-safe mx-auto w-full min-w-0 max-w-[1600px] overflow-x-hidden p-4 md:p-8">{children}</main>
         </SidebarInset>
-        <nav aria-label="اختصارات الهاتف" className="safe-area-bottom fixed inset-x-0 bottom-0 z-30 border-t border-[#dbe9e2] bg-white/95 px-2 pb-2 pt-2 shadow-[0_-12px_32px_-24px_rgba(23,52,74,.5)] backdrop-blur-xl sm:hidden">
-          <div className="mx-auto grid max-w-md grid-flow-col auto-cols-fr gap-1">
-            {mobileShortcuts.map(item => {
-              const isActive = location === item.path;
-              return <button key={item.path} type="button" onClick={() => setLocation(item.path)} aria-current={isActive ? "page" : undefined} className={`touch-target flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-bold transition-colors ${isActive ? "bg-[#e6f5ef] text-[#0f766e]" : "text-slate-500 hover:bg-[#f2f8f5] hover:text-[#0f766e]"}`}><item.icon className="h-[18px] w-[18px]" /><span className="max-w-full truncate">{item.path === "/" ? "الرئيسية" : item.label}</span></button>;
-            })}
-          </div>
-        </nav>
+        <MobileShortcutNav role={user.role} location={location} onNavigate={setLocation} unreadNotifications={unreadNotifications} taskBadges={taskBadges} />
       </SidebarProvider>
     </div>
   );

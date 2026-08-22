@@ -208,11 +208,14 @@ export const appRouter = router({
       const role = ctx.user.role;
 
       if (hasRole(role, ownerRoles)) {
-        const [activeBranches, activeEmployees, allKpis, latestRun] = await Promise.all([
+        const [activeBranches, activeEmployees, allKpis, latestRun, pendingLinkRequests, pendingLeaveRequests, payrollCandidates] = await Promise.all([
           db.select().from(branches).where(eq(branches.isActive, "yes")),
           db.select().from(employees).where(eq(employees.employmentStatus, "active")),
           db.select().from(kpiRecords),
           db.select().from(payrollRuns).orderBy(desc(payrollRuns.createdAt)).limit(1),
+          db.select({ id: accountLinkRequests.id }).from(accountLinkRequests).where(eq(accountLinkRequests.status, "pending")),
+          db.select({ id: leaveRequests.id }).from(leaveRequests).where(eq(leaveRequests.status, "pending")),
+          db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns),
         ]);
         const averageKpi = allKpis.length ? allKpis.reduce((total, item) => total + toNumber(item.score), 0) / allKpis.length : null;
         return { stats: [
@@ -220,17 +223,22 @@ export const appRouter = router({
           { value: String(activeEmployees.length), hint: activeEmployees.length ? "ملفات موظفين نشطة" : "لا توجد ملفات موظفين" },
           { value: averageKpi === null ? "—" : `${Math.round(averageKpi)}%`, hint: averageKpi === null ? "يتطلب إدخال مؤشرات الأداء" : "متوسط مؤشرات الأداء المسجلة" },
           { value: latestRun[0]?.status === "paid" ? "مدفوع" : latestRun[0]?.status === "approved" ? "معتمد" : latestRun[0] ? "مسودة" : "مسودة", hint: latestRun[0] ? `مسير ${latestRun[0].month}/${latestRun[0].year}` : "يُنشأ عند اكتمال البيانات" },
-        ] };
+        ], taskBadges: {
+          accountLinks: pendingLinkRequests.length,
+          leaves: pendingLeaveRequests.length,
+          payroll: payrollCandidates.filter(run => run.status === "pending_manager" || run.status === "pending_hr").length,
+        } };
       }
 
       const employee = await requireEmployeeProfile(ctx.user.id);
       if (role === "manager") {
         const team = await db.select().from(employees).where(and(eq(employees.branchId, employee.branchId), eq(employees.employmentStatus, "active")));
         const ids = new Set(team.map(member => member.id));
-        const [todayAttendance, todayAssignments, pendingRequests] = await Promise.all([
+        const [todayAttendance, todayAssignments, pendingRequests, payrollCandidates] = await Promise.all([
           db.select().from(attendanceRecords).where(eq(attendanceRecords.workDate, today)),
           db.select().from(shiftAssignments).where(eq(shiftAssignments.workDate, today)),
           db.select().from(leaveRequests).where(eq(leaveRequests.status, "pending")),
+          db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns).where(eq(payrollRuns.branchId, employee.branchId)),
         ]);
         const teamAttendance = todayAttendance.filter(record => ids.has(record.employeeId));
         const present = teamAttendance.filter(record => record.status === "present" || record.status === "late").length;
@@ -242,15 +250,20 @@ export const appRouter = router({
           { value: String(scheduled), hint: scheduled ? "ورديات مسندة اليوم" : "أنشئ جدول الفرع أولاً" },
           { value: String(pending), hint: pending ? "طلبات بانتظار المراجعة" : "لا توجد طلبات معلقة" },
           { value: commitment === null ? "—" : `${commitment}%`, hint: commitment === null ? "يتحسب من سجلات الحضور" : "نسبة الحضور المسجل اليوم" },
-        ] };
+        ], taskBadges: {
+          accountLinks: 0,
+          leaves: pending,
+          payroll: payrollCandidates.filter(run => run.status === "pending_manager").length,
+        } };
       }
 
       const from = new Date(today.getFullYear(), today.getMonth(), 1);
-      const [assignment, attendance, balances, records] = await Promise.all([
+      const [assignment, attendance, balances, records, payrollCandidates] = await Promise.all([
         db.select({ assignment: shiftAssignments, shift: shifts }).from(shiftAssignments).innerJoin(shifts, eq(shiftAssignments.shiftId, shifts.id)).where(and(eq(shiftAssignments.employeeId, employee.id), eq(shiftAssignments.workDate, today))).limit(1),
         db.select().from(attendanceRecords).where(and(eq(attendanceRecords.employeeId, employee.id), eq(attendanceRecords.workDate, today))).limit(1),
         db.select().from(leaveBalances).where(and(eq(leaveBalances.employeeId, employee.id), eq(leaveBalances.year, today.getFullYear()))).limit(1),
         db.select().from(kpiRecords).where(and(eq(kpiRecords.employeeId, employee.id), gte(kpiRecords.periodStart, from), lte(kpiRecords.periodEnd, endOfDay(today)))),
+        role === "hr_manager" ? db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns).where(eq(payrollRuns.branchId, employee.branchId)) : Promise.resolve([]),
       ]);
       const todayAttendance = attendance[0];
       const balance = balances[0];
@@ -261,13 +274,17 @@ export const appRouter = router({
         { value: todayAttendance?.workedMinutes ? `${Math.round(todayAttendance.workedMinutes / 60)} س` : "—", hint: todayAttendance?.checkInAt ? "ساعات محسوبة حتى الانصراف" : "تظهر مع التسجيل اليومي" },
         { value: kpiScore === null ? "—" : `${Math.round(kpiScore)}%`, hint: kpiScore === null ? "لم يُحدد هدف لهذا الشهر" : "متوسط نتائج المؤشرات" },
         { value: remainingLeave === null ? "—" : `${remainingLeave} ي`, hint: remainingLeave === null ? "يظهر عند إعداد الرصيد" : "الرصيد السنوي المتبقي" },
-      ] };
+      ], taskBadges: { accountLinks: 0, leaves: 0, payroll: 0 } };
       return { stats: [
         { value: assignment[0] ? `${String(assignment[0].shift.startTime).slice(0, 5)}` : "—", hint: assignment[0] ? `حتى ${String(assignment[0].shift.endTime).slice(0, 5)}` : "لم تُسند وردية بعد" },
         { value: todayAttendance?.checkInAt ? (todayAttendance.checkOutAt ? "مكتمل" : "حاضر") : "—", hint: todayAttendance?.lateMinutes ? `تأخير ${todayAttendance.lateMinutes} دقيقة` : "سجّل الحضور عند بدء العمل" },
         { value: remainingLeave === null ? "—" : `${remainingLeave} ي`, hint: remainingLeave === null ? "يظهر بعد إنشاء ملفك" : "الرصيد السنوي المتبقي" },
         { value: kpiScore === null ? "—" : `${Math.round(kpiScore)}%`, hint: kpiScore === null ? "ترتبط بالأهداف المسندة إليك" : "متوسط نتائجك الشهرية" },
-      ] };
+      ], taskBadges: {
+        accountLinks: 0,
+        leaves: 0,
+        payroll: role === "hr_manager" ? payrollCandidates.filter(run => run.status === "pending_hr").length : 0,
+      } };
     }),
   }),
 

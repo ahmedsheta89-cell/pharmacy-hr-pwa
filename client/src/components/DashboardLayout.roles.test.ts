@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getMobileShortcutsForRole, getNavigationForRole, normalizeLayoutRole } from "./DashboardLayout";
+import { getMobileShortcutBadgeCount, getMobileShortcutsForRole, getNavigationForRole, normalizeLayoutRole } from "./DashboardLayout";
 
 describe("تنقل الواجهة بحسب الدور", () => {
   it("يعرض وحدات الإدارة للمالك والمدير فقط", () => {
@@ -34,5 +34,19 @@ describe("تنقل الواجهة بحسب الدور", () => {
     expect(getMobileShortcutsForRole("owner").map(item => item.path)).toEqual(["/", "/attendance", "/shifts", "/leaves", "/payroll"]);
     expect(getMobileShortcutsForRole("employee").map(item => item.path)).toEqual(["/", "/attendance", "/shifts", "/leaves"]);
     expect(getMobileShortcutsForRole("hr_manager").map(item => item.path)).toEqual(["/payroll"]);
+  });
+
+  it("يعرض شارة الإشعارات الجديدة على الاختصار الرئيسي فقط", () => {
+    expect(getMobileShortcutBadgeCount("/", 3)).toBe(3);
+    expect(getMobileShortcutBadgeCount("/attendance", 3)).toBe(0);
+    expect(getMobileShortcutBadgeCount("/", -2)).toBe(0);
+  });
+
+  it("يربط المهام المعلقة باختصاراتها المناسبة إلى جانب الرسائل", () => {
+    const tasks = { accountLinks: 2, leaves: 4, payroll: 1 };
+    expect(getMobileShortcutBadgeCount("/", 3, tasks)).toBe(5);
+    expect(getMobileShortcutBadgeCount("/leaves", 3, tasks)).toBe(4);
+    expect(getMobileShortcutBadgeCount("/payroll", 3, tasks)).toBe(1);
+    expect(getMobileShortcutBadgeCount("/shifts", 3, tasks)).toBe(0);
   });
 });

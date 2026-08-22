@@ -15,6 +15,15 @@
       p { margin: 14px 0 0; color: #64748b; font-size: .95rem; line-height: 1.9; }
       button { min-width: 44px; min-height: 44px; margin-top: 26px; border: 0; border-radius: 14px; background: #0f766e; color: white; padding: 11px 18px; font: inherit; font-weight: 700; cursor: pointer; }
       button:focus-visible { outline: 3px solid #76cdb1; outline-offset: 3px; }
+      .snapshot { display: none; margin-top: 22px; border: 1px solid #dbe9e2; border-radius: 18px; background: #f8fbf9; padding: 15px; text-align: right; }
+      .snapshot[data-visible="true"] { display: block; }
+      .snapshot h2 { margin: 0; color: #17344a; font-size: .9rem; }
+      .snapshot .timestamp { margin: 5px 0 0; font-size: .75rem; line-height: 1.6; }
+      .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+      .stat { min-width: 0; border-radius: 12px; background: white; padding: 10px; }
+      .stat strong, .stat span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .stat strong { font-size: .75rem; color: #64748b; }
+      .stat span { margin-top: 4px; color: #17344a; font-size: 1rem; font-weight: 800; }
     </style>
   </head>
   <body>
@@ -22,7 +31,43 @@
       <div class="icon" aria-hidden="true">⌁</div>
       <h1 id="offline-title">لا يوجد اتصال بالإنترنت</h1>
       <p>تحقق من الشبكة ثم أعد المحاولة. ستعود بياناتك وعملياتك المتاحة تلقائياً عند استعادة الاتصال.</p>
+      <section id="offline-snapshot" class="snapshot" aria-live="polite" aria-label="آخر بيانات متاحة دون اتصال">
+        <h2>آخر بيانات أساسية متاحة</h2>
+        <p id="offline-snapshot-time" class="timestamp"></p>
+        <div id="offline-snapshot-stats" class="stats"></div>
+      </section>
       <button type="button" onclick="window.location.reload()">إعادة المحاولة</button>
     </main>
+    <script>
+      (function () {
+        var latestKey = "pharmacy-hr:offline-dashboard:latest";
+        var prefix = "pharmacy-hr:offline-dashboard:";
+        var maxAge = 7 * 24 * 60 * 60 * 1000;
+        try {
+          var latest = JSON.parse(localStorage.getItem(latestKey) || "null");
+          if (!latest || latest.userId === undefined) return;
+          var snapshot = JSON.parse(localStorage.getItem(prefix + latest.userId) || "null");
+          if (!snapshot || snapshot.version !== 1 || !Array.isArray(snapshot.stats) || Date.now() - snapshot.savedAt > maxAge) return;
+          var container = document.getElementById("offline-snapshot");
+          var statList = document.getElementById("offline-snapshot-stats");
+          var timestamp = document.getElementById("offline-snapshot-time");
+          snapshot.stats.slice(0, 4).forEach(function (stat) {
+            var card = document.createElement("div");
+            card.className = "stat";
+            var label = document.createElement("strong");
+            label.textContent = String(stat.label || "بيان");
+            var value = document.createElement("span");
+            value.textContent = String(stat.value || "—");
+            card.appendChild(label);
+            card.appendChild(value);
+            statList.appendChild(card);
+          });
+          timestamp.textContent = "آخر مزامنة: " + new Intl.DateTimeFormat("ar-EG", { dateStyle: "short", timeStyle: "short" }).format(new Date(snapshot.savedAt));
+          container.dataset.visible = "true";
+        } catch (_) {
+          // The fallback remains useful even when browser storage is unavailable.
+        }
+      })();
+    </script>
   </body>
 </html>
