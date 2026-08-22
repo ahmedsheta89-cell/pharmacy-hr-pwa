@@ -64,4 +64,4 @@ button, a, input, select, textarea { touch-action: manipulation; }
 .safe-area-top { padding-top: env(safe-area-inset-top, 0px); }
 .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 .touch-target { min-width: 44px; min-height: 44px; }
-@media (max-width: 639px) { .mobile-content-safe { padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); } }
+@media (max-width: 639px) { .mobile-content-safe { padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px)); } }

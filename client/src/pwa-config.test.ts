@@ -18,10 +18,12 @@ describe("إعدادات PWA وإتاحة الهاتف", () => {
     expect(manifest.icons).toHaveLength(1);
   });
 
-  it("يخزن غلاف التطبيق ويستثني واجهات البيانات الحية من التخزين", () => {
+  it("يخزن غلاف التطبيق ويستثني واجهات البيانات الحية من التخزين ويوجه للتعافي دون اتصال", () => {
     const serviceWorker = readProjectFile("client/public/sw.js");
-    expect(serviceWorker).toContain('const CACHE_NAME = "pharmacy-hr-shell-v2"');
+    expect(serviceWorker).toContain('const CACHE_NAME = "pharmacy-hr-shell-v3"');
     expect(serviceWorker).toContain('url.pathname.startsWith("/api/")');
-    expect(serviceWorker).toContain('caches.match("/")');
+    expect(serviceWorker).toContain('caches.match("/offline.html")');
+    expect(serviceWorker).toContain("SKIP_WAITING");
+    expect(readProjectFile("client/public/offline.html")).toContain("لا يوجد اتصال بالإنترنت");
   });
 });

@@ -1,10 +1,13 @@
 const CACHE_NAME = "pharmacy-hr-shell-v1";
-const CACHE_NAME = "pharmacy-hr-shell-v2";
-const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/pharmacy-hr.svg"];
+const CACHE_NAME = "pharmacy-hr-shell-v3";
+const APP_SHELL = ["/", "/offline.html", "/manifest.webmanifest", "/icons/pharmacy-hr.svg"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
-  self.skipWaiting();
+});
+
+self.addEventListener("message", event => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", event => {
@@ -25,7 +28,7 @@ self.addEventListener("fetch", event => {
         caches.open(CACHE_NAME).then(cache => cache.put("/", copy));
       }
       return response;
-    }).catch(() => caches.match(request).then(cached => cached || caches.match("/"))));
+    }).catch(() => caches.match(request).then(cached => cached || caches.match("/offline.html"))));
     return;
   }
 

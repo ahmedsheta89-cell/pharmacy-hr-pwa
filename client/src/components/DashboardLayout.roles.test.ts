@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getNavigationForRole, normalizeLayoutRole } from "./DashboardLayout";
+import { getMobileShortcutsForRole, getNavigationForRole, normalizeLayoutRole } from "./DashboardLayout";
 
 describe("تنقل الواجهة بحسب الدور", () => {
   it("يعرض وحدات الإدارة للمالك والمدير فقط", () => {
@@ -28,5 +28,11 @@ describe("تنقل الواجهة بحسب الدور", () => {
     expect(paths).not.toContain("/employees");
     expect(paths).not.toContain("/employee-audit-log");
     expect(normalizeLayoutRole("hr_manager")).toBe("hr_manager");
+  });
+
+  it("يبني اختصارات الهاتف من الوحدات المصرح بها فقط", () => {
+    expect(getMobileShortcutsForRole("owner").map(item => item.path)).toEqual(["/", "/attendance", "/shifts", "/leaves", "/payroll"]);
+    expect(getMobileShortcutsForRole("employee").map(item => item.path)).toEqual(["/", "/attendance", "/shifts", "/leaves"]);
+    expect(getMobileShortcutsForRole("hr_manager").map(item => item.path)).toEqual(["/payroll"]);
   });
 });

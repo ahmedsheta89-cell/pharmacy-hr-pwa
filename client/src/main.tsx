@@ -5,6 +5,7 @@ import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
+import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
 import { startLogin } from "./const";
 import { fetchWithTimeout } from "./lib/fetchWithTimeout";
 import "./index.css";
@@ -77,6 +78,7 @@ createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
       <App />
+      <PwaUpdatePrompt />
     </QueryClientProvider>
   </trpc.Provider>
 );
@@ -84,7 +86,7 @@ createRoot(document.getElementById("root")!).render(
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").then(registration => {
-      const announceUpdate = () => window.dispatchEvent(new CustomEvent("pwa:update-available"));
+      const announceUpdate = () => window.dispatchEvent(new CustomEvent("pwa:update-available", { detail: { registration } }));
       if (registration.waiting) announceUpdate();
       registration.addEventListener("updatefound", () => {
         registration.installing?.addEventListener("statechange", () => {

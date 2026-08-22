@@ -77,6 +77,13 @@ export function getNavigationForRole(role?: string) {
   return allNavigation.filter(item => item.roles.includes(normalizedRole));
 }
 
+export function getMobileShortcutsForRole(role?: string) {
+  const allowedNavigation = getNavigationForRole(role);
+  return ["/", "/attendance", "/shifts", "/leaves", "/payroll"]
+    .map(path => allowedNavigation.find(item => item.path === path))
+    .filter((item): item is typeof allowedNavigation[number] => Boolean(item));
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { loading, user, logout } = useAuth();
   const [location, setLocation] = useLocation();
@@ -104,6 +111,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const role = normalizeLayoutRole(user.role);
   const navigation = getNavigationForRole(user.role);
   const activeItem = navigation.find(item => item.path === location) ?? navigation[0];
+  const mobileShortcuts = getMobileShortcutsForRole(user.role);
   const initials = user.name?.trim().slice(0, 2).toUpperCase() || "PH";
   const unreadNotifications = (notificationsQuery.data ?? []).filter(notification => !notification.readAt).length;
 
@@ -202,6 +210,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </header>
           <main className="mobile-content-safe mx-auto w-full min-w-0 max-w-[1600px] overflow-x-hidden p-4 md:p-8">{children}</main>
         </SidebarInset>
+        <nav aria-label="اختصارات الهاتف" className="safe-area-bottom fixed inset-x-0 bottom-0 z-30 border-t border-[#dbe9e2] bg-white/95 px-2 pb-2 pt-2 shadow-[0_-12px_32px_-24px_rgba(23,52,74,.5)] backdrop-blur-xl sm:hidden">
+          <div className="mx-auto grid max-w-md grid-flow-col auto-cols-fr gap-1">
+            {mobileShortcuts.map(item => {
+              const isActive = location === item.path;
+              return <button key={item.path} type="button" onClick={() => setLocation(item.path)} aria-current={isActive ? "page" : undefined} className={`touch-target flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-[10px] font-bold transition-colors ${isActive ? "bg-[#e6f5ef] text-[#0f766e]" : "text-slate-500 hover:bg-[#f2f8f5] hover:text-[#0f766e]"}`}><item.icon className="h-[18px] w-[18px]" /><span className="max-w-full truncate">{item.path === "/" ? "الرئيسية" : item.label}</span></button>;
+            })}
+          </div>
+        </nav>
       </SidebarProvider>
     </div>
   );

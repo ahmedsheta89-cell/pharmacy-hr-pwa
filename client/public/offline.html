@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f766e" />
+    <title>لا يوجد اتصال — نظام Pharmacy People</title>
+    <style>
+      :root { color-scheme: light; font-family: Cairo, Tahoma, Arial, sans-serif; }
+      * { box-sizing: border-box; }
+      body { min-width: 320px; min-height: 100dvh; margin: 0; display: grid; place-items: center; background: radial-gradient(circle at 20% 20%, #e6f5ef 0, transparent 34%), #f4f7f5; color: #17344a; padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
+      main { width: min(100%, 440px); border: 1px solid #dbe9e2; border-radius: 28px; background: rgba(255,255,255,.96); padding: 32px; text-align: center; box-shadow: 0 24px 64px -36px rgba(15,118,110,.48); }
+      .icon { width: 64px; height: 64px; margin: 0 auto 20px; display: grid; place-items: center; border-radius: 22px; background: #e6f5ef; color: #0f766e; font-size: 30px; }
+      h1 { margin: 0; font-size: clamp(1.45rem, 6vw, 2rem); line-height: 1.35; }
+      p { margin: 14px 0 0; color: #64748b; font-size: .95rem; line-height: 1.9; }
+      button { min-width: 44px; min-height: 44px; margin-top: 26px; border: 0; border-radius: 14px; background: #0f766e; color: white; padding: 11px 18px; font: inherit; font-weight: 700; cursor: pointer; }
+      button:focus-visible { outline: 3px solid #76cdb1; outline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <main aria-labelledby="offline-title">
+      <div class="icon" aria-hidden="true">⌁</div>
+      <h1 id="offline-title">لا يوجد اتصال بالإنترنت</h1>
+      <p>تحقق من الشبكة ثم أعد المحاولة. ستعود بياناتك وعملياتك المتاحة تلقائياً عند استعادة الاتصال.</p>
+      <button type="button" onclick="window.location.reload()">إعادة المحاولة</button>
+    </main>
+  </body>
+</html>
