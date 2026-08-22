@@ -4,11 +4,15 @@
   "description": "نظام إدارة الموارد البشرية ومؤشرات الأداء المخصص للصيدليات.",
   "lang": "ar",
   "dir": "rtl",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#f7faf8",
   "theme_color": "#0f766e",
+  "categories": ["business", "productivity", "medical"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/pharmacy-hr.svg",

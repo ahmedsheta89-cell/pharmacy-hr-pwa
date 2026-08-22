@@ -108,7 +108,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const unreadNotifications = (notificationsQuery.data ?? []).filter(notification => !notification.readAt).length;
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#f4f7f5] text-[#17344a]">
+    <div dir="rtl" className="min-h-[100dvh] bg-[#f4f7f5] text-[#17344a]">
       <SidebarProvider defaultOpen>
         <Sidebar side="right" collapsible="icon" className="border-l border-[#dbe9e2] border-r-0 bg-[#fbfdfc]">
           <SidebarHeader className="px-4 pt-5 pb-5">
@@ -150,7 +150,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
           </SidebarContent>
 
-          <SidebarFooter className="p-3">
+          <SidebarFooter className="safe-area-bottom p-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex w-full items-center gap-3 rounded-2xl border border-[#e1ece6] bg-white p-2.5 text-right outline-none transition hover:border-[#b9d8ca] focus-visible:ring-2 focus-visible:ring-[#0f766e]">
@@ -174,9 +174,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </Sidebar>
 
         <SidebarInset className="min-w-0 overflow-x-hidden bg-[#f4f7f5]">
-          <header className="sticky top-0 z-20 flex h-[74px] min-w-0 items-center justify-between border-b border-[#e1ece6] bg-[#f4f7f5]/90 px-4 backdrop-blur-xl md:px-8">
+          <header className="safe-area-top sticky top-0 z-20 flex min-h-[74px] min-w-0 items-center justify-between border-b border-[#e1ece6] bg-[#f4f7f5]/90 px-4 backdrop-blur-xl md:px-8">
             <div className="flex min-w-0 items-center gap-3">
-              <SidebarTrigger className="h-10 w-10 rounded-xl border border-[#dbe9e2] bg-white text-[#17344a] hover:bg-[#eaf4ef]" />
+              <SidebarTrigger aria-label="فتح قائمة التنقل" className="touch-target h-11 w-11 rounded-xl border border-[#dbe9e2] bg-white text-[#17344a] hover:bg-[#eaf4ef]" />
               <div>
                 <p className="text-[11px] font-bold tracking-[.12em] text-[#0f766e]">{roleLabels[role]}</p>
                 <h1 className="text-lg font-extrabold tracking-tight text-[#17344a]">{activeItem?.label || "نظام الصيدلية"}</h1>
@@ -200,7 +200,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="h-9 rounded-full bg-[#e6f5ef] px-3.5 flex items-center text-xs font-bold text-[#0f766e]">اليوم</div>
             </div>
           </header>
-          <main className="mx-auto w-full min-w-0 max-w-[1600px] overflow-x-hidden p-4 md:p-8">{children}</main>
+          <main className="mobile-content-safe mx-auto w-full min-w-0 max-w-[1600px] overflow-x-hidden p-4 md:p-8">{children}</main>
         </SidebarInset>
       </SidebarProvider>
     </div>

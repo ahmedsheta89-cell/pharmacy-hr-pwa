@@ -53,8 +53,15 @@
 }
 
 * { border-color: var(--border); }
-html { direction: rtl; background: #f4f7f5; }
-body { min-width: 320px; margin: 0; background: #f4f7f5; font-family: "Cairo", ui-sans-serif, system-ui, sans-serif; }
+html { direction: rtl; background: #f4f7f5; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { min-width: 320px; margin: 0; overflow-x: hidden; background: #f4f7f5; font-family: "Cairo", ui-sans-serif, system-ui, sans-serif; }
 button, input, textarea, select { font: inherit; }
+button, a, input, select, textarea { touch-action: manipulation; }
+:focus-visible { outline: 3px solid color-mix(in srgb, #0f766e 76%, white); outline-offset: 3px; }
 ::selection { background: #bde9d4; color: #17344a; }
 @media (prefers-reduced-motion: no-preference) { button, a { transition-duration: 160ms; transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1); } button:active { transform: scale(.98); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; } }
+.safe-area-top { padding-top: env(safe-area-inset-top, 0px); }
+.safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.touch-target { min-width: 44px; min-height: 44px; }
+@media (max-width: 639px) { .mobile-content-safe { padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); } }
