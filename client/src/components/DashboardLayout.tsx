@@ -44,7 +44,7 @@ import {
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 
-type AppRole = "owner" | "manager" | "pharmacist" | "employee";
+type AppRole = "owner" | "manager" | "hr_manager" | "pharmacist" | "employee";
 
 export const allNavigation = [
   { icon: LayoutDashboard, label: "نظرة عامة", path: "/", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
@@ -55,19 +55,20 @@ export const allNavigation = [
   { icon: CalendarDays, label: "الورديات", path: "/shifts", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: ReceiptText, label: "الإجازات", path: "/leaves", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: BarChart3, label: "مؤشرات الأداء", path: "/kpis", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
-  { icon: WalletCards, label: "الرواتب", path: "/payroll", roles: ["owner", "manager"] as AppRole[] },
+  { icon: WalletCards, label: "الرواتب", path: "/payroll", roles: ["owner", "manager", "hr_manager"] as AppRole[] },
 ];
 
 const roleLabels: Record<AppRole, string> = {
   owner: "مالك النظام",
   manager: "مدير الفرع",
+  hr_manager: "مدير الموارد البشرية",
   pharmacist: "صيدلاني",
   employee: "موظف",
 };
 
 export function normalizeLayoutRole(role?: string): AppRole {
   if (role === "admin" || role === "owner") return "owner";
-  if (role === "manager" || role === "pharmacist") return role;
+  if (role === "manager" || role === "hr_manager" || role === "pharmacist") return role;
   return "employee";
 }
 
@@ -172,9 +173,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </SidebarFooter>
         </Sidebar>
 
-        <SidebarInset className="bg-[#f4f7f5]">
-          <header className="sticky top-0 z-20 flex h-[74px] items-center justify-between border-b border-[#e1ece6] bg-[#f4f7f5]/90 px-4 backdrop-blur-xl md:px-8">
-            <div className="flex items-center gap-3">
+        <SidebarInset className="min-w-0 overflow-x-hidden bg-[#f4f7f5]">
+          <header className="sticky top-0 z-20 flex h-[74px] min-w-0 items-center justify-between border-b border-[#e1ece6] bg-[#f4f7f5]/90 px-4 backdrop-blur-xl md:px-8">
+            <div className="flex min-w-0 items-center gap-3">
               <SidebarTrigger className="h-10 w-10 rounded-xl border border-[#dbe9e2] bg-white text-[#17344a] hover:bg-[#eaf4ef]" />
               <div>
                 <p className="text-[11px] font-bold tracking-[.12em] text-[#0f766e]">{roleLabels[role]}</p>
@@ -199,7 +200,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="h-9 rounded-full bg-[#e6f5ef] px-3.5 flex items-center text-xs font-bold text-[#0f766e]">اليوم</div>
             </div>
           </header>
-          <main className="mx-auto w-full max-w-[1600px] p-4 md:p-8">{children}</main>
+          <main className="mx-auto w-full min-w-0 max-w-[1600px] overflow-x-hidden p-4 md:p-8">{children}</main>
         </SidebarInset>
       </SidebarProvider>
     </div>

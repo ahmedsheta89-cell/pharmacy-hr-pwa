@@ -14,6 +14,7 @@ import {
   leaveBalances,
   leaveRequests,
   notifications,
+  payrollApprovals,
   payrollItems,
   payrollRuns,
   salaryStructures,
@@ -28,9 +29,10 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
-const staffRoles = ["manager", "pharmacist", "employee"] as const;
+const staffRoles = ["manager", "hr_manager", "pharmacist", "employee"] as const;
 const ownerRoles = ["admin", "owner"] as const;
 const managerRoles = ["admin", "owner", "manager"] as const;
+const payrollRoles = ["admin", "owner", "manager", "hr_manager"] as const;
 const employeeStatusValues = ["active", "inactive", "on_leave"] as const;
 const accountLinkRequestStatusValues = ["pending", "approved", "rejected", "cancelled"] as const;
 const employeeFieldLabels: Record<string, string> = { employeeCode: "الكود الوظيفي", fullName: "الاسم", phone: "الهاتف", email: "البريد الإلكتروني", jobTitle: "المسمى الوظيفي", role: "الدور", hireDate: "تاريخ التعيين", nationalId: "الرقم القومي", employmentStatus: "حالة الملف" };
@@ -44,6 +46,7 @@ function auditValue(field: string, value: unknown) {
 
 function changedFields(before: Record<string, unknown>, after: Record<string, unknown>) {
   return Object.keys(employeeFieldLabels).flatMap(field => {
+    if (!Object.prototype.hasOwnProperty.call(after, field)) return [];
     const previous = auditValue(field, before[field]);
     const next = auditValue(field, after[field]);
     return previous === next ? [] : [{ field, label: employeeFieldLabels[field], before: previous, after: next }];
@@ -61,6 +64,11 @@ const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
 
 const managerProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (!hasRole(ctx.user.role, managerRoles)) throw new TRPCError({ code: "FORBIDDEN", message: "ليس لديك صلاحية إدارة بيانات الفريق." });
+  return next({ ctx });
+});
+
+const payrollProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!hasRole(ctx.user.role, payrollRoles)) throw new TRPCError({ code: "FORBIDDEN", message: "ليس لديك صلاحية الوصول إلى مسيرات الرواتب." });
   return next({ ctx });
 });
 
@@ -636,7 +644,41 @@ export const appRouter = router({
       }
       return { success: true, payrollRunId: run.id, createdItems };
     }),
-    listRuns: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+    submitForApproval: payrollProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
+      await assertBranchScope(ctx.user, run.branchId);
+      if (run.status !== "draft" && run.status !== "rejected") throw new TRPCError({ code: "CONFLICT", message: "لا يمكن إرسال هذا المسير للاعتماد في حالته الحالية." });
+      await db.update(payrollRuns).set({ status: "pending_manager" }).where(eq(payrollRuns.id, run.id));
+      return { success: true, status: "pending_manager" as const };
+    }),
+    reviewApproval: payrollProcedure.input(z.object({ payrollRunId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]), note: z.string().max(1000).optional() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
+      await assertBranchScope(ctx.user, run.branchId);
+      const isOwner = hasRole(ctx.user.role, ownerRoles);
+      const isManager = ctx.user.role === "manager";
+      const isHrManager = ctx.user.role === "hr_manager";
+      const managerStage = run.status === "pending_manager" && (isManager || isOwner);
+      const hrStage = run.status === "pending_hr" && (isHrManager || isOwner);
+      if (!managerStage && !hrStage) throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية اتخاذ هذا القرار في مرحلة الاعتماد الحالية." });
+      const approver = await getEmployeeByUserId(ctx.user.id);
+      const approvalStage = managerStage ? "manager" : "hr_manager";
+      const nextStatus = input.decision === "rejected" ? "rejected" : managerStage ? "pending_hr" : "approved";
+      await db.insert(payrollApprovals).values({ payrollRunId: run.id, approverEmployeeId: approver?.id ?? null, approvalStage, decision: input.decision, note: input.note || null });
+      await db.update(payrollRuns).set({ status: nextStatus }).where(eq(payrollRuns.id, run.id));
+      return { success: true, status: nextStatus };
+    }),
+    approvalHistory: payrollProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
+      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
+      await assertBranchScope(ctx.user, run.branchId);
+      return db.select({ approval: payrollApprovals, approver: employees }).from(payrollApprovals).leftJoin(employees, eq(payrollApprovals.approverEmployeeId, employees.id)).where(eq(payrollApprovals.payrollRunId, input.payrollRunId)).orderBy(desc(payrollApprovals.createdAt));
+    }),
+    listRuns: payrollProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
       await assertBranchScope(ctx.user, input.branchId);
       const db = await requireDb();
       return db.select().from(payrollRuns).where(eq(payrollRuns.branchId, input.branchId)).orderBy(desc(payrollRuns.year), desc(payrollRuns.month));

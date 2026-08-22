@@ -35,15 +35,17 @@ vi.mock("./db", () => ({ getDb: async () => fixture.db, getEmployeeByUserId: asy
 
 import { appRouter } from "./routers";
 
-function context(role: "owner" | "manager" | "employee"): TrpcContext {
+function context(role: "owner" | "manager" | "hr_manager" | "employee"): TrpcContext {
   return { user: { id: 1, openId: `test-${role}`, name: "اختبار", email: "test@example.com", loginMethod: "test", role, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }, req: { protocol: "https", headers: {} } as TrpcContext["req"], res: { clearCookie: () => undefined } as TrpcContext["res"] };
 }
 
 describe("دورة حياة الموظف", () => {
   it("يسمح للمالك بتعديل بيانات الموظف", async () => {
     fixture.updated.length = 0;
+    fixture.auditEvents.length = 0;
     await expect(appRouter.createCaller(context("owner")).employees.update({ employeeId: 7, employeeCode: "13", fullName: "إبراهيم المعدل", jobTitle: "مساعد صيدلي", role: "employee", hireDate: new Date("2026-08-06") })).resolves.toEqual({ success: true });
     expect(fixture.updated[0]).toMatchObject({ fullName: "إبراهيم المعدل", jobTitle: "مساعد صيدلي" });
+    expect(fixture.auditEvents[0]?.changes).not.toEqual(expect.arrayContaining([expect.objectContaining({ field: "employmentStatus" })]));
   });
 
   it("يؤرشف الموظف بدلاً من حذفه", async () => {
@@ -156,6 +158,27 @@ describe("دورة حياة الموظف", () => {
     fixture.selectResults.push([{ id: 71, userId: 1, readAt: null }]);
     await expect(appRouter.createCaller(context("owner")).notifications.markRead({ notificationId: 71 })).resolves.toEqual({ success: true });
     expect(fixture.updated).toEqual(expect.arrayContaining([expect.objectContaining({ readAt: expect.any(Date) })]));
+  });
+
+  it("يرسل المدير المسير لاعتماد المدير ثم يحيله لمدير الموارد البشرية مع تسجيل القرار", async () => {
+    fixture.updated.length = 0;
+    fixture.auditEvents.length = 0;
+    fixture.selectResults.push([{ id: 81, branchId: 1, status: "draft", year: 2026, month: 8 }]);
+    await expect(appRouter.createCaller(context("manager")).payroll.submitForApproval({ payrollRunId: 81 })).resolves.toEqual({ success: true, status: "pending_manager" });
+    expect(fixture.updated[0]).toMatchObject({ status: "pending_manager" });
+    fixture.selectResults.push([{ id: 81, branchId: 1, status: "pending_manager", year: 2026, month: 8 }]);
+    await expect(appRouter.createCaller(context("manager")).payroll.reviewApproval({ payrollRunId: 81, decision: "approved" })).resolves.toEqual({ success: true, status: "pending_hr" });
+    expect(fixture.auditEvents).toEqual(expect.arrayContaining([expect.objectContaining({ payrollRunId: 81, approvalStage: "manager", decision: "approved" })]));
+  });
+
+  it("يقصر الاعتماد النهائي على مدير الموارد البشرية أو المالك ويرفض دور الموظف", async () => {
+    fixture.updated.length = 0;
+    fixture.auditEvents.length = 0;
+    fixture.selectResults.push([{ id: 82, branchId: 1, status: "pending_hr", year: 2026, month: 8 }]);
+    await expect(appRouter.createCaller(context("hr_manager")).payroll.reviewApproval({ payrollRunId: 82, decision: "approved", note: "تمت المراجعة" })).resolves.toEqual({ success: true, status: "approved" });
+    expect(fixture.updated[0]).toMatchObject({ status: "approved" });
+    fixture.selectResults.push([{ id: 82, branchId: 1, status: "pending_hr", year: 2026, month: 8 }]);
+    await expect(appRouter.createCaller(context("employee")).payroll.reviewApproval({ payrollRunId: 82, decision: "approved" })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("يرفض تعديل الموظف من دور غير إداري", async () => {

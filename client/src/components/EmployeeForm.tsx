@@ -8,7 +8,7 @@ export type EmployeeFormValues = {
   phone?: string;
   email?: string;
   jobTitle: string;
-  role: "manager" | "pharmacist" | "employee";
+  role: "manager" | "hr_manager" | "pharmacist" | "employee";
   hireDate: Date;
   nationalId?: string;
 };
@@ -33,7 +33,7 @@ function toInputDate(value: Date) {
 }
 
 export function EmployeeForm({ employee, error, submitting, onSubmit, onCancel }: { employee?: EditableEmployee | null; error?: string | null; submitting: boolean; onSubmit: (values: EmployeeFormValues) => void; onCancel: () => void }) {
-  const selectedRole = employee?.role === "manager" || employee?.role === "pharmacist" || employee?.role === "employee" ? employee.role : "employee";
+  const selectedRole = employee?.role === "manager" || employee?.role === "hr_manager" || employee?.role === "pharmacist" || employee?.role === "employee" ? employee.role : "employee";
   return <form noValidate onSubmit={event => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -53,7 +53,7 @@ export function EmployeeForm({ employee, error, submitting, onSubmit, onCancel }
     <label><span className="text-xs font-bold">الاسم الكامل</span><Input name="fullName" required defaultValue={employee?.fullName ?? ""} className={fieldClass} /></label>
     <label><span className="text-xs font-bold">الكود الوظيفي</span><Input name="employeeCode" required defaultValue={employee?.employeeCode ?? ""} className={fieldClass} /></label>
     <label><span className="text-xs font-bold">المسمى الوظيفي</span><Input name="jobTitle" required defaultValue={employee?.jobTitle ?? ""} placeholder="صيدلاني" className={fieldClass} /></label>
-    <label><span className="text-xs font-bold">الدور</span><select name="role" className={selectClass} defaultValue={selectedRole}><option value="employee">موظف</option><option value="pharmacist">صيدلاني</option><option value="manager">مدير</option></select></label>
+    <label><span className="text-xs font-bold">الدور</span><select name="role" className={selectClass} defaultValue={selectedRole}><option value="employee">موظف</option><option value="pharmacist">صيدلاني</option><option value="manager">مدير فرع</option><option value="hr_manager">مدير موارد بشرية</option></select></label>
     <label><span className="text-xs font-bold">تاريخ التعيين</span><Input name="hireDate" type="date" defaultValue={employee ? toInputDate(employee.hireDate) : toInputDate(new Date())} required className={fieldClass} /></label>
     <label><span className="text-xs font-bold">الهاتف</span><Input name="phone" defaultValue={employee?.phone ?? ""} className={fieldClass} /></label>
     <label><span className="text-xs font-bold">البريد الإلكتروني</span><Input name="email" type="email" defaultValue={employee?.email ?? ""} className={fieldClass} /></label>

@@ -21,4 +21,12 @@ describe("تنقل الواجهة بحسب الدور", () => {
     }
     expect(normalizeLayoutRole("admin")).toBe("owner");
   });
+
+  it("يعرض الرواتب لمدير الموارد البشرية دون إظهار إدارة ملفات الموظفين", () => {
+    const paths = getNavigationForRole("hr_manager").map(item => item.path);
+    expect(paths).toContain("/payroll");
+    expect(paths).not.toContain("/employees");
+    expect(paths).not.toContain("/employee-audit-log");
+    expect(normalizeLayoutRole("hr_manager")).toBe("hr_manager");
+  });
 });
