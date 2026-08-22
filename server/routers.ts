@@ -2,6 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import {
+  accountLinkLogs,
+  accountLinkRequests,
   attendanceRecords,
   branches,
   employeeAuditLogs,
@@ -11,6 +13,7 @@ import {
   kpiRecords,
   leaveBalances,
   leaveRequests,
+  notifications,
   payrollItems,
   payrollRuns,
   salaryStructures,
@@ -29,6 +32,7 @@ const staffRoles = ["manager", "pharmacist", "employee"] as const;
 const ownerRoles = ["admin", "owner"] as const;
 const managerRoles = ["admin", "owner", "manager"] as const;
 const employeeStatusValues = ["active", "inactive", "on_leave"] as const;
+const accountLinkRequestStatusValues = ["pending", "approved", "rejected", "cancelled"] as const;
 const employeeFieldLabels: Record<string, string> = { employeeCode: "الكود الوظيفي", fullName: "الاسم", phone: "الهاتف", email: "البريد الإلكتروني", jobTitle: "المسمى الوظيفي", role: "الدور", hireDate: "تاريخ التعيين", nationalId: "الرقم القومي", employmentStatus: "حالة الملف" };
 
 function auditValue(field: string, value: unknown) {
@@ -159,10 +163,12 @@ export const appRouter = router({
       const created = await getEmployeeByUserId(ctx.user.id);
       if (created) {
         await db.insert(employeeAuditLogs).values({ employeeId: created.id, branchId: created.branchId, actorUserId: ctx.user.id, actorName: ctx.user.name ?? null, action: "created", changes: [{ field: "userId", label: "ربط الحساب", before: null, after: "تم ربط حساب مالك النظام" }] });
+        await db.insert(accountLinkLogs).values({ employeeId: created.id, userId: ctx.user.id, branchId: created.branchId, action: "linked", source: "owner_self_setup", actorUserId: ctx.user.id, actorName: ctx.user.name ?? null });
+        await db.insert(notifications).values({ userId: ctx.user.id, type: "account_linked", title: "تم ربط حسابك الوظيفي", body: "تم ربط حسابك بملفك الوظيفي بنجاح. يمكنك الآن استخدام خدمات الحضور وبوابة الموظف.", data: { employeeId: created.id } });
       }
       return { success: true, existing: false, employeeId: created?.id ?? null };
     }),
-    unlinkedUsers: ownerProcedure.query(async () => {
+    unlinkedUsers: managerProcedure.query(async () => {
       const db = await requireDb();
       const [accounts, assignedEmployees] = await Promise.all([
         db.select({ id: users.id, name: users.name, email: users.email, role: users.role }).from(users),
@@ -170,6 +176,20 @@ export const appRouter = router({
       ]);
       const assignedUserIds = new Set(assignedEmployees.flatMap(employee => employee.userId ? [employee.userId] : []));
       return accounts.filter(account => !assignedUserIds.has(account.id));
+    }),
+  }),
+
+  notifications: router({
+    mine: protectedProcedure.query(async ({ ctx }) => {
+      const db = await requireDb();
+      return db.select().from(notifications).where(eq(notifications.userId, ctx.user.id)).orderBy(desc(notifications.createdAt)).limit(10);
+    }),
+    markRead: protectedProcedure.input(z.object({ notificationId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const notification = (await db.select().from(notifications).where(eq(notifications.id, input.notificationId)).limit(1))[0];
+      if (!notification || notification.userId !== ctx.user.id) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على الإشعار." });
+      if (!notification.readAt) await db.update(notifications).set({ readAt: new Date() }).where(eq(notifications.id, input.notificationId));
+      return { success: true };
     }),
   }),
 
@@ -265,7 +285,7 @@ export const appRouter = router({
         return direction * a.fullName.localeCompare(b.fullName, "ar");
       });
     }),
-    linkUser: managerProcedure.input(z.object({ employeeId: z.number().int().positive(), userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+    linkUser: ownerProcedure.input(z.object({ employeeId: z.number().int().positive(), userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = await requireDb();
       const employee = (await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
       if (!employee) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على ملف الموظف." });
@@ -278,7 +298,71 @@ export const appRouter = router({
       if (employee.userId === input.userId) return { success: true, existing: true };
       await db.update(employees).set({ userId: input.userId }).where(eq(employees.id, employee.id));
       await db.insert(employeeAuditLogs).values({ employeeId: employee.id, branchId: employee.branchId, actorUserId: ctx.user.id, actorName: ctx.user.name ?? null, action: "updated", changes: [{ field: "userId", label: "ربط الحساب", before: null, after: account.name ?? `حساب #${account.id}` }] });
+      await db.insert(accountLinkLogs).values({ employeeId: employee.id, userId: input.userId, branchId: employee.branchId, action: "linked", source: "owner_direct", actorUserId: ctx.user.id, actorName: ctx.user.name ?? null });
+      await db.insert(notifications).values({ userId: input.userId, type: "account_linked", title: "تم ربط حسابك الوظيفي", body: `تم ربط حسابك بنجاح بملفك الوظيفي: ${employee.fullName}.`, data: { employeeId: employee.id } });
       return { success: true, existing: false };
+    }),
+    unlinkUser: ownerProcedure.input(z.object({ employeeId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const employee = (await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
+      if (!employee) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على ملف الموظف." });
+      if (!employee.userId) return { success: true, existing: true };
+      if (employee.userId === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "لا يمكنك فك ربط حسابك الشخصي من ملفك الوظيفي." });
+      const linkedUser = (await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, employee.userId)).limit(1))[0];
+      await db.update(employees).set({ userId: null }).where(eq(employees.id, employee.id));
+      await db.insert(employeeAuditLogs).values({ employeeId: employee.id, branchId: employee.branchId, actorUserId: ctx.user.id, actorName: ctx.user.name ?? null, action: "updated", changes: [{ field: "userId", label: "فك ربط الحساب", before: linkedUser?.name ?? `حساب #${employee.userId}`, after: null }] });
+      await db.insert(accountLinkLogs).values({ employeeId: employee.id, userId: employee.userId, branchId: employee.branchId, action: "unlinked", source: "owner_direct", actorUserId: ctx.user.id, actorName: ctx.user.name ?? null });
+      await db.insert(notifications).values({ userId: employee.userId, type: "account_unlinked", title: "تم فك ربط حسابك الوظيفي", body: "تم فك ربط حسابك من ملف الموظف. تواصل مع الإدارة إذا كنت تعتقد أن هذا الإجراء غير صحيح.", data: { employeeId: employee.id } });
+      return { success: true, existing: false };
+    }),
+    requestUserLink: managerProcedure.input(z.object({ employeeId: z.number().int().positive(), userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const employee = (await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
+      if (!employee) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على ملف الموظف." });
+      await assertBranchScope(ctx.user, employee.branchId);
+      if (employee.userId) throw new TRPCError({ code: "CONFLICT", message: "ملف الموظف مرتبط بالفعل بحساب مستخدم." });
+      const account = (await db.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).limit(1))[0];
+      if (!account) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على حساب المستخدم." });
+      const alreadyLinked = (await db.select({ id: employees.id }).from(employees).where(eq(employees.userId, input.userId)).limit(1))[0];
+      if (alreadyLinked) throw new TRPCError({ code: "CONFLICT", message: "هذا الحساب مرتبط بالفعل بملف موظف آخر." });
+      const pending = (await db.select({ id: accountLinkRequests.id }).from(accountLinkRequests).where(and(eq(accountLinkRequests.employeeId, input.employeeId), eq(accountLinkRequests.userId, input.userId), eq(accountLinkRequests.status, "pending"))).limit(1))[0];
+      if (pending) return { success: true, existing: true, requestId: pending.id };
+      const inserted = await db.insert(accountLinkRequests).values({ employeeId: employee.id, userId: input.userId, branchId: employee.branchId, requestedByUserId: ctx.user.id, requestedByName: ctx.user.name ?? null });
+      return { success: true, existing: false, requestId: Number(inserted[0].insertId) };
+    }),
+    pendingLinkRequests: ownerProcedure.query(async () => {
+      const db = await requireDb();
+      return db.select({ request: accountLinkRequests, employeeName: employees.fullName, employeeCode: employees.employeeCode, accountName: users.name, accountEmail: users.email }).from(accountLinkRequests).innerJoin(employees, eq(accountLinkRequests.employeeId, employees.id)).innerJoin(users, eq(accountLinkRequests.userId, users.id)).where(eq(accountLinkRequests.status, "pending")).orderBy(desc(accountLinkRequests.createdAt));
+    }),
+    reviewLinkRequest: ownerProcedure.input(z.object({ requestId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]), note: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const request = (await db.select().from(accountLinkRequests).where(eq(accountLinkRequests.id, input.requestId)).limit(1))[0];
+      if (!request) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على طلب الربط." });
+      if (request.status !== "pending") throw new TRPCError({ code: "CONFLICT", message: "تمت مراجعة هذا الطلب مسبقاً." });
+      const reviewedAt = new Date();
+      if (input.decision === "rejected") {
+        await db.update(accountLinkRequests).set({ status: "rejected", reviewedByUserId: ctx.user.id, reviewedByName: ctx.user.name ?? null, reviewNote: input.note || null, reviewedAt }).where(eq(accountLinkRequests.id, request.id));
+        return { success: true, status: "rejected" as const };
+      }
+      const employee = (await db.select().from(employees).where(eq(employees.id, request.employeeId)).limit(1))[0];
+      if (!employee) throw new TRPCError({ code: "NOT_FOUND", message: "لم يعد ملف الموظف موجوداً." });
+      if (employee.userId) throw new TRPCError({ code: "CONFLICT", message: "تم ربط ملف الموظف بحساب آخر بالفعل." });
+      const account = (await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, request.userId)).limit(1))[0];
+      if (!account) throw new TRPCError({ code: "NOT_FOUND", message: "لم يعد حساب المستخدم موجوداً." });
+      const alreadyLinked = (await db.select({ id: employees.id }).from(employees).where(eq(employees.userId, request.userId)).limit(1))[0];
+      if (alreadyLinked) throw new TRPCError({ code: "CONFLICT", message: "هذا الحساب مرتبط بالفعل بملف موظف آخر." });
+      await db.update(employees).set({ userId: request.userId }).where(eq(employees.id, employee.id));
+      await db.update(accountLinkRequests).set({ status: "approved", reviewedByUserId: ctx.user.id, reviewedByName: ctx.user.name ?? null, reviewNote: input.note || null, reviewedAt }).where(eq(accountLinkRequests.id, request.id));
+      await db.insert(employeeAuditLogs).values({ employeeId: employee.id, branchId: employee.branchId, actorUserId: ctx.user.id, actorName: ctx.user.name ?? null, action: "updated", changes: [{ field: "userId", label: "ربط الحساب بعد الاعتماد", before: null, after: account.name ?? `حساب #${account.id}` }] });
+      await db.insert(accountLinkLogs).values({ employeeId: employee.id, userId: request.userId, branchId: employee.branchId, action: "linked", source: "owner_approved_request", requestId: request.id, actorUserId: ctx.user.id, actorName: ctx.user.name ?? null });
+      await db.insert(notifications).values({ userId: request.userId, type: "account_linked", title: "تم ربط حسابك الوظيفي", body: `اعتمد المالك طلب ربط حسابك بملفك الوظيفي: ${employee.fullName}.`, data: { employeeId: employee.id, requestId: request.id } });
+      return { success: true, status: "approved" as const };
+    }),
+    linkHistory: managerProcedure.input(z.object({ employeeId: z.number().int().positive().optional() }).optional()).query(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const records = await db.select({ log: accountLinkLogs, employeeName: employees.fullName, employeeCode: employees.employeeCode }).from(accountLinkLogs).innerJoin(employees, eq(accountLinkLogs.employeeId, employees.id)).orderBy(desc(accountLinkLogs.createdAt));
+      const manager = hasRole(ctx.user.role, ownerRoles) ? null : await requireEmployeeProfile(ctx.user.id);
+      return records.filter(record => (!manager || record.log.branchId === manager.branchId) && (!input?.employeeId || record.log.employeeId === input.employeeId));
     }),
     create: managerProcedure.input(z.object({
       branchId: z.number().int().positive(), employeeCode: z.string().trim().min(2).max(32), fullName: z.string().trim().min(3).max(160), phone: z.string().trim().max(32).optional(), email: z.string().email().optional(), jobTitle: z.string().trim().min(2).max(120), role: z.enum(staffRoles), hireDate: z.coerce.date(), nationalId: z.string().trim().max(48).optional(),

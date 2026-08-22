@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { trpc } from "@/lib/trpc";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import { startLogin } from "@/const";
 import {
   BarChart3,
   ArchiveRestore,
+  Bell,
   CalendarDays,
   ChevronLeft,
   Clock3,
@@ -77,6 +79,8 @@ export function getNavigationForRole(role?: string) {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { loading, user, logout } = useAuth();
   const [location, setLocation] = useLocation();
+  const notificationsQuery = trpc.notifications.mine.useQuery(undefined, { enabled: Boolean(user) && !loading });
+  const markNotificationRead = trpc.notifications.markRead.useMutation({ onSuccess: () => notificationsQuery.refetch() });
 
   if (loading) return <DashboardLayoutSkeleton />;
 
@@ -100,6 +104,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navigation = getNavigationForRole(user.role);
   const activeItem = navigation.find(item => item.path === location) ?? navigation[0];
   const initials = user.name?.trim().slice(0, 2).toUpperCase() || "PH";
+  const unreadNotifications = (notificationsQuery.data ?? []).filter(notification => !notification.readAt).length;
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#f4f7f5] text-[#17344a]">
@@ -177,6 +182,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
             </div>
             <div className="hidden items-center gap-2 sm:flex">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button aria-label="الإشعارات" className="relative grid h-9 w-9 place-items-center rounded-full border border-[#dbe9e2] bg-white text-[#17344a] transition hover:bg-[#eaf4ef] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0f766e]">
+                    <Bell className="h-4 w-4" />
+                    {unreadNotifications ? <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-[#e25555] px-1 text-[9px] font-extrabold text-white">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span> : null}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80 rounded-2xl p-2 text-right">
+                  <DropdownMenuLabel className="flex items-center justify-between px-2 text-right text-xs text-slate-500"><span>الإشعارات</span><span>{unreadNotifications ? `${unreadNotifications} غير مقروء` : "محدّثة"}</span></DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {(notificationsQuery.data ?? []).length ? notificationsQuery.data?.map(notification => <DropdownMenuItem key={notification.id} onClick={() => { if (!notification.readAt) markNotificationRead.mutate({ notificationId: notification.id }); }} className={`block cursor-pointer rounded-xl px-3 py-3 whitespace-normal focus:bg-[#eaf4ef] ${notification.readAt ? "opacity-60" : "bg-[#f7fcf9]"}`}><p className="font-bold text-[#17344a]">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-500">{notification.body}</p></DropdownMenuItem>) : <p className="px-3 py-5 text-center text-xs text-slate-500">لا توجد إشعارات جديدة.</p>}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <div className="flex h-9 items-center gap-2 rounded-full border border-[#dbe9e2] bg-white px-3 text-xs font-semibold text-slate-500"><ShieldCheck className="h-4 w-4 text-[#0f766e]" />بيانات محمية</div>
               <div className="h-9 rounded-full bg-[#e6f5ef] px-3.5 flex items-center text-xs font-bold text-[#0f766e]">اليوم</div>
             </div>

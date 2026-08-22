@@ -281,6 +281,43 @@ export const notifications = mysqlTable("notifications", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => [index("notifications_user_read_idx").on(table.userId, table.readAt)]);
 
+export const accountLinkRequests = mysqlTable("accountLinkRequests", {
+  id: int("id").autoincrement().primaryKey(),
+  employeeId: int("employeeId").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  requestedByUserId: int("requestedByUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  requestedByName: varchar("requestedByName", { length: 160 }),
+  status: mysqlEnum("status", ["pending", "approved", "rejected", "cancelled"]).default("pending").notNull(),
+  reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
+  reviewedByName: varchar("reviewedByName", { length: 160 }),
+  reviewNote: text("reviewNote"),
+  reviewedAt: timestamp("reviewedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("accountLinkRequests_status_created_idx").on(table.status, table.createdAt),
+  index("accountLinkRequests_branch_status_idx").on(table.branchId, table.status),
+  index("accountLinkRequests_employee_status_idx").on(table.employeeId, table.status),
+]);
+
+export const accountLinkLogs = mysqlTable("accountLinkLogs", {
+  id: int("id").autoincrement().primaryKey(),
+  employeeId: int("employeeId").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  userId: int("userId").references(() => users.id, { onDelete: "set null" }),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  action: mysqlEnum("action", ["linked", "unlinked"]).notNull(),
+  source: mysqlEnum("source", ["owner_direct", "owner_approved_request", "owner_self_setup"]).notNull(),
+  requestId: int("requestId").references(() => accountLinkRequests.id, { onDelete: "set null" }),
+  actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+  actorName: varchar("actorName", { length: 160 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("accountLinkLogs_employee_created_idx").on(table.employeeId, table.createdAt),
+  index("accountLinkLogs_user_created_idx").on(table.userId, table.createdAt),
+  index("accountLinkLogs_branch_created_idx").on(table.branchId, table.createdAt),
+]);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Employee = typeof employees.$inferSelect;
