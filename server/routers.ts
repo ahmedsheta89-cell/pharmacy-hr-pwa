@@ -16,6 +16,7 @@ import {
   salaryStructures,
   shiftAssignments,
   shifts,
+  users,
 } from "../drizzle/schema";
 import { calculateKpiScore, calculatePayroll } from "../shared/hr-calculations";
 import { getDb, getEmployeeByUserId } from "./db";
@@ -137,6 +138,39 @@ export const appRouter = router({
       const employee = await getEmployeeByUserId(ctx.user.id);
       return { user: ctx.user, employee: employee ?? null };
     }),
+    setupEmployeeProfile: ownerProcedure.input(z.object({ branchId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const existing = await getEmployeeByUserId(ctx.user.id);
+      if (existing) return { success: true, existing: true, employeeId: existing.id };
+      const db = await requireDb();
+      const branch = (await db.select().from(branches).where(eq(branches.id, input.branchId)).limit(1))[0];
+      if (!branch || branch.isActive !== "yes") throw new TRPCError({ code: "BAD_REQUEST", message: "اختر فرعاً نشطاً لإنشاء ملفك الوظيفي." });
+      const employeeCode = `ADM-${ctx.user.id}`;
+      await db.insert(employees).values({
+        userId: ctx.user.id,
+        branchId: input.branchId,
+        employeeCode,
+        fullName: ctx.user.name?.trim() || "مالك النظام",
+        email: ctx.user.email ?? null,
+        jobTitle: "مالك النظام",
+        role: "manager",
+        hireDate: startOfDay(),
+        employmentStatus: "active",
+      });
+      const created = await getEmployeeByUserId(ctx.user.id);
+      if (created) {
+        await db.insert(employeeAuditLogs).values({ employeeId: created.id, branchId: created.branchId, actorUserId: ctx.user.id, actorName: ctx.user.name ?? null, action: "created", changes: [{ field: "userId", label: "ربط الحساب", before: null, after: "تم ربط حساب مالك النظام" }] });
+      }
+      return { success: true, existing: false, employeeId: created?.id ?? null };
+    }),
+    unlinkedUsers: ownerProcedure.query(async () => {
+      const db = await requireDb();
+      const [accounts, assignedEmployees] = await Promise.all([
+        db.select({ id: users.id, name: users.name, email: users.email, role: users.role }).from(users),
+        db.select({ userId: employees.userId }).from(employees),
+      ]);
+      const assignedUserIds = new Set(assignedEmployees.flatMap(employee => employee.userId ? [employee.userId] : []));
+      return accounts.filter(account => !assignedUserIds.has(account.id));
+    }),
   }),
 
   dashboard: router({
@@ -230,6 +264,21 @@ export const appRouter = router({
         if (input?.sortBy === "createdAt") return direction * (a.createdAt.getTime() - b.createdAt.getTime());
         return direction * a.fullName.localeCompare(b.fullName, "ar");
       });
+    }),
+    linkUser: managerProcedure.input(z.object({ employeeId: z.number().int().positive(), userId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const employee = (await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
+      if (!employee) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على ملف الموظف." });
+      await assertBranchScope(ctx.user, employee.branchId);
+      if (employee.userId && employee.userId !== input.userId) throw new TRPCError({ code: "CONFLICT", message: "ملف الموظف مرتبط بالفعل بحساب آخر." });
+      const account = (await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, input.userId)).limit(1))[0];
+      if (!account) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على حساب المستخدم." });
+      const alreadyLinked = (await db.select({ id: employees.id }).from(employees).where(eq(employees.userId, input.userId)).limit(1))[0];
+      if (alreadyLinked && alreadyLinked.id !== employee.id) throw new TRPCError({ code: "CONFLICT", message: "هذا الحساب مرتبط بالفعل بملف موظف آخر." });
+      if (employee.userId === input.userId) return { success: true, existing: true };
+      await db.update(employees).set({ userId: input.userId }).where(eq(employees.id, employee.id));
+      await db.insert(employeeAuditLogs).values({ employeeId: employee.id, branchId: employee.branchId, actorUserId: ctx.user.id, actorName: ctx.user.name ?? null, action: "updated", changes: [{ field: "userId", label: "ربط الحساب", before: null, after: account.name ?? `حساب #${account.id}` }] });
+      return { success: true, existing: false };
     }),
     create: managerProcedure.input(z.object({
       branchId: z.number().int().positive(), employeeCode: z.string().trim().min(2).max(32), fullName: z.string().trim().min(3).max(160), phone: z.string().trim().max(32).optional(), email: z.string().email().optional(), jobTitle: z.string().trim().min(2).max(120), role: z.enum(staffRoles), hireDate: z.coerce.date(), nationalId: z.string().trim().max(48).optional(),

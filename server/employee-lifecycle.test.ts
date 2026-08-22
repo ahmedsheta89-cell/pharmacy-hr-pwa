@@ -5,7 +5,7 @@ const fixture = vi.hoisted(() => {
   const updated: Record<string, unknown>[] = [];
   const auditEvents: Record<string, unknown>[] = [];
   const auditRows = [{ id: 31, employeeId: 7, action: "updated", actorUserId: 1, actorName: "اختبار", changes: [{ field: "fullName", label: "الاسم", before: "إبراهيم", after: "إبراهيم المعدل" }], createdAt: new Date("2026-08-22T09:00:00Z") }];
-  const employee = { id: 7, userId: null, branchId: 1, employeeCode: "13", fullName: "إبراهيم", phone: null, email: null, jobTitle: "مساعد", role: "employee", hireDate: new Date("2026-08-06"), nationalId: null, employmentStatus: "active" };
+  const employee = { id: 7, userId: null, branchId: 1, employeeCode: "13", fullName: "إبراهيم", phone: null, email: null, jobTitle: "مساعد", role: "employee", hireDate: new Date("2026-08-06"), nationalId: null, employmentStatus: "active", isActive: "yes" };
   const employeeRows = [employee];
   const query = {
     limit: async () => employeeRows,
@@ -17,6 +17,7 @@ const fixture = vi.hoisted(() => {
     auditEvents,
     auditRows,
     employees: employeeRows,
+    linkedEmployee: { id: 2, branchId: 1 },
     db: {
       select: () => ({ from: () => ({ where: () => query }) }),
       update: () => ({ set: (values: Record<string, unknown>) => ({ where: async () => { updated.push(values); } }) }),
@@ -25,7 +26,7 @@ const fixture = vi.hoisted(() => {
   };
 });
 
-vi.mock("./db", () => ({ getDb: async () => fixture.db, getEmployeeByUserId: async () => ({ id: 2, branchId: 1 }) }));
+vi.mock("./db", () => ({ getDb: async () => fixture.db, getEmployeeByUserId: async () => fixture.linkedEmployee }));
 
 import { appRouter } from "./routers";
 
@@ -72,6 +73,28 @@ describe("دورة حياة الموظف", () => {
     await expect(appRouter.createCaller(context("owner")).employees.auditLog({ employeeId: 7 })).resolves.toMatchObject([{ id: 31, action: "updated" }]);
     await expect(appRouter.createCaller(context("manager")).employees.auditLog({ employeeId: 7 })).resolves.toMatchObject([{ id: 31, action: "updated" }]);
     await expect(appRouter.createCaller(context("employee")).employees.auditLog({ employeeId: 7 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("يسمح للمالك بإنشاء ملفه الوظيفي وربط حسابه قبل تسجيل الحضور", async () => {
+    fixture.auditEvents.length = 0;
+    fixture.linkedEmployee = null;
+    await expect(appRouter.createCaller(context("owner")).profile.setupEmployeeProfile({ branchId: 1 })).resolves.toMatchObject({ success: true, existing: false });
+    expect(fixture.auditEvents[0]).toMatchObject({ userId: 1, branchId: 1, employeeCode: "ADM-1", jobTitle: "مالك النظام", role: "manager" });
+    fixture.linkedEmployee = { id: 2, branchId: 1 };
+  });
+
+  it("يرفض إنشاء ملف المالك من حساب غير مصرح له", async () => {
+    await expect(appRouter.createCaller(context("employee")).profile.setupEmployeeProfile({ branchId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("يربط المدير حساباً غير مرتبط بملف موظف من نطاق الفرع نفسه", async () => {
+    fixture.updated.length = 0;
+    await expect(appRouter.createCaller(context("manager")).employees.linkUser({ employeeId: 7, userId: 2 })).resolves.toEqual({ success: true, existing: false });
+    expect(fixture.updated[0]).toMatchObject({ userId: 2 });
+  });
+
+  it("يمنع الموظف من ربط الحسابات بملفات الموظفين", async () => {
+    await expect(appRouter.createCaller(context("employee")).employees.linkUser({ employeeId: 7, userId: 2 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("يرفض تعديل الموظف من دور غير إداري", async () => {
