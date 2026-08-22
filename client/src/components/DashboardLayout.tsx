@@ -33,42 +33,35 @@ import {
   Pill,
   ReceiptText,
   ShieldCheck,
-  Send,
   Sparkles,
-  ClipboardCheck,
   UsersRound,
   WalletCards,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 
-type AppRole = "owner" | "manager" | "hr_manager" | "pharmacist" | "employee";
+type AppRole = "owner" | "manager" | "pharmacist" | "employee";
 
 export const allNavigation = [
   { icon: LayoutDashboard, label: "نظرة عامة", path: "/", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
-  { icon: UsersRound, label: "الموظفون", path: "/employees", roles: ["owner", "manager", "hr_manager"] as AppRole[] },
+  { icon: UsersRound, label: "الموظفون", path: "/employees", roles: ["owner", "manager"] as AppRole[] },
   { icon: Clock3, label: "الحضور والانصراف", path: "/attendance", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: CalendarDays, label: "الورديات", path: "/shifts", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: ReceiptText, label: "الإجازات", path: "/leaves", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
-  { icon: BarChart3, label: "مؤشرات الأداء", path: "/kpis", roles: ["owner", "manager", "hr_manager", "pharmacist", "employee"] as AppRole[] },
-  { icon: WalletCards, label: "الرواتب", path: "/payroll", roles: ["owner", "manager", "hr_manager"] as AppRole[] },
-  { icon: ShieldCheck, label: "سجل اعتماد الرواتب", path: "/payroll-approvals", roles: ["owner", "manager", "hr_manager"] as AppRole[] },
-  { icon: Send, label: "جاهزية الكشوف", path: "/payroll-delivery", roles: ["owner", "manager", "hr_manager"] as AppRole[] },
-  { icon: BarChart3, label: "لوحة الأداء", path: "/analytics", roles: ["owner", "manager", "hr_manager"] as AppRole[] },
-  { icon: ClipboardCheck, label: "سيناريوهات الاعتماد", path: "/scenarios", roles: ["owner"] as AppRole[] },
+  { icon: BarChart3, label: "مؤشرات الأداء", path: "/kpis", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
+  { icon: WalletCards, label: "الرواتب", path: "/payroll", roles: ["owner", "manager"] as AppRole[] },
 ];
 
 const roleLabels: Record<AppRole, string> = {
   owner: "مالك النظام",
   manager: "مدير الفرع",
-  hr_manager: "مدير الموارد البشرية",
   pharmacist: "صيدلاني",
   employee: "موظف",
 };
 
 export function normalizeLayoutRole(role?: string): AppRole {
   if (role === "admin" || role === "owner") return "owner";
-  if (role === "manager" || role === "hr_manager" || role === "pharmacist") return role;
+  if (role === "manager" || role === "pharmacist") return role;
   return "employee";
 }
 

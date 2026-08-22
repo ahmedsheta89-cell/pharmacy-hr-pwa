@@ -10,7 +10,6 @@ import {
   kpiRecords,
   leaveBalances,
   leaveRequests,
-  payrollApprovals,
   payrollItems,
   payrollRuns,
   salaryStructures,
@@ -18,13 +17,7 @@ import {
   shifts,
 } from "../drizzle/schema";
 import { calculateKpiScore, calculatePayroll } from "../shared/hr-calculations";
-import { buildSalesKpiSummary } from "../shared/kpi-analytics";
-import { getNextPayrollStatus } from "../shared/payroll-approval";
-import { getPayrollDeliveryReadiness } from "../shared/payroll-delivery";
-import { createAttendanceQrToken, verifyAttendanceQrToken } from "../shared/attendance-qr";
-import { AttendanceQrWorkflowError, recordCheckInByQr, recordCheckOutByQr } from "./attendance-qr-workflow";
 import { getDb, getEmployeeByUserId } from "./db";
-import { ENV } from "./_core/env";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -32,9 +25,7 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 const staffRoles = ["manager", "pharmacist", "employee"] as const;
 const ownerRoles = ["admin", "owner"] as const;
-const managerRoles = ["admin", "owner", "manager", "hr_manager"] as const;
-const directManagerRoles = ["admin", "owner", "manager"] as const;
-const humanResourcesRoles = ["admin", "owner", "hr_manager"] as const;
+const managerRoles = ["admin", "owner", "manager"] as const;
 
 function hasRole(role: string, permitted: readonly string[]) {
   return permitted.includes(role);
@@ -47,16 +38,6 @@ const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
 
 const managerProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (!hasRole(ctx.user.role, managerRoles)) throw new TRPCError({ code: "FORBIDDEN", message: "ليس لديك صلاحية إدارة بيانات الفريق." });
-  return next({ ctx });
-});
-
-const directManagerProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (!hasRole(ctx.user.role, directManagerRoles)) throw new TRPCError({ code: "FORBIDDEN", message: "اعتماد المدير المباشر متاح للمدير أو مالك النظام فقط." });
-  return next({ ctx });
-});
-
-const humanResourcesProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (!hasRole(ctx.user.role, humanResourcesRoles)) throw new TRPCError({ code: "FORBIDDEN", message: "اعتماد الموارد البشرية متاح لمدير الموارد البشرية أو مالك النظام فقط." });
   return next({ ctx });
 });
 
@@ -88,27 +69,6 @@ async function requireEmployeeProfile(userId: number) {
   return employee;
 }
 
-async function getOptionalEmployeeId(userId: number) {
-  return (await getEmployeeByUserId(userId))?.id ?? null;
-}
-
-function attendanceQrRepository(db: Awaited<ReturnType<typeof requireDb>>) {
-  return {
-    getEmployeeProfile: async (userId: number) => (await getEmployeeByUserId(userId)) ?? null,
-    findTodayRecord: async (employeeId: number, workDate: Date) => (await db.select().from(attendanceRecords).where(and(eq(attendanceRecords.employeeId, employeeId), eq(attendanceRecords.workDate, workDate))).limit(1))[0] ?? null,
-    findTodayAssignment: async (employeeId: number, workDate: Date) => (await db.select({ assignmentId: shiftAssignments.id, startTime: shifts.startTime, graceMinutes: shifts.graceMinutes }).from(shiftAssignments).innerJoin(shifts, eq(shiftAssignments.shiftId, shifts.id)).where(and(eq(shiftAssignments.employeeId, employeeId), eq(shiftAssignments.workDate, workDate))).limit(1))[0] ?? null,
-    createRecord: async (values: { employeeId: number; shiftAssignmentId: number | null; workDate: Date; checkInAt: Date; lateMinutes: number; status: "present" | "late" }) => {
-      await db.insert(attendanceRecords).values(values);
-    },
-    updateCheckIn: async (recordId: number, values: { shiftAssignmentId: number | null; checkInAt: Date; lateMinutes: number; status: "present" | "late" }) => {
-      await db.update(attendanceRecords).set(values).where(eq(attendanceRecords.id, recordId));
-    },
-    updateCheckOut: async (recordId: number, values: { checkOutAt: Date; workedMinutes: number }) => {
-      await db.update(attendanceRecords).set(values).where(eq(attendanceRecords.id, recordId));
-    },
-  };
-}
-
 async function assertBranchScope(user: { id: number; role: string }, branchId: number) {
   if (hasRole(user.role, ownerRoles)) return;
   const employee = await requireEmployeeProfile(user.id);
@@ -138,10 +98,19 @@ export const appRouter = router({
       const db = await requireDb();
       return db.select().from(branches).orderBy(asc(branches.name));
     }),
-    createBranch: ownerProcedure.input(z.object({ name: z.string().trim().min(2).max(160), code: z.string().trim().min(2).max(32), address: z.string().trim().max(1000).optional() })).mutation(async ({ input }) => {
+    createBranch: ownerProcedure.input(z.object({ name: z.string().trim().min(2, "اسم الفرع يجب ألا يقل عن حرفين.").max(160), code: z.string().trim().max(32), address: z.string().trim().max(1000).optional() })).mutation(async ({ input }) => {
+      if (!input.code) throw new TRPCError({ code: "BAD_REQUEST", message: "أدخل كوداً للفرع." });
       const db = await requireDb();
-      await db.insert(branches).values({ name: input.name, code: input.code.toUpperCase(), address: input.address || null });
-      return { success: true };
+      const code = input.code.toUpperCase();
+      const findExisting = () => db.select({ id: branches.id }).from(branches).where(eq(branches.code, code)).limit(1);
+      if ((await findExisting()).length) return { success: true, existing: true };
+      try {
+        await db.insert(branches).values({ name: input.name, code, address: input.address || null });
+      } catch {
+        if ((await findExisting()).length) return { success: true, existing: true };
+        throw new TRPCError({ code: "CONFLICT", message: "تعذر حفظ الفرع. تأكد من أن كود الفرع غير مستخدم ثم أعد المحاولة." });
+      }
+      return { success: true, existing: false };
     }),
   }),
 
@@ -219,44 +188,6 @@ export const appRouter = router({
         { value: remainingLeave === null ? "—" : `${remainingLeave} ي`, hint: remainingLeave === null ? "يظهر بعد إنشاء ملفك" : "الرصيد السنوي المتبقي" },
         { value: kpiScore === null ? "—" : `${Math.round(kpiScore)}%`, hint: kpiScore === null ? "ترتبط بالأهداف المسندة إليك" : "متوسط نتائجك الشهرية" },
       ] };
-    }),
-  }),
-
-  analytics: router({
-    kpiDashboard: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
-      await assertBranchScope(ctx.user, input.branchId);
-      const db = await requireDb();
-      const now = new Date();
-      const from = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-      const team = await db.select().from(employees).where(and(eq(employees.branchId, input.branchId), eq(employees.employmentStatus, "active")));
-      const ids = new Set(team.map(employee => employee.id));
-      const [records, definitions, attendance] = await Promise.all([
-        db.select().from(kpiRecords).where(gte(kpiRecords.periodEnd, from)),
-        db.select().from(kpiDefinitions).where(eq(kpiDefinitions.branchId, input.branchId)),
-        db.select().from(attendanceRecords).where(gte(attendanceRecords.workDate, new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6))),
-      ]);
-      const definitionById = new Map(definitions.map(definition => [definition.id, definition]));
-      const scopedRecords = records.filter(record => ids.has(record.employeeId));
-      const categories = ["sales", "operations", "service", "attendance"].map(category => {
-        const list = scopedRecords.filter(record => definitionById.get(record.kpiDefinitionId)?.category === category);
-        return { category, score: list.length ? Math.round(list.reduce((sum, record) => sum + toNumber(record.score), 0) / list.length) : 0 };
-      });
-      const employeesPerformance = team.map(employee => {
-        const list = scopedRecords.filter(record => record.employeeId === employee.id);
-        return { name: employee.fullName, score: list.length ? Math.round(list.reduce((sum, record) => sum + toNumber(record.score), 0) / list.length) : 0 };
-      }).sort((a, b) => b.score - a.score).slice(0, 8);
-      const dailyAttendance = Array.from({ length: 7 }, (_, index) => {
-        const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6 + index);
-        const key = startOfDay(day).getTime();
-        const present = attendance.filter(record => ids.has(record.employeeId) && startOfDay(record.workDate).getTime() === key && (record.status === "present" || record.status === "late")).length;
-        return { day: new Intl.DateTimeFormat("ar-EG", { weekday: "short" }).format(day), present, team: team.length };
-      });
-      const sales = buildSalesKpiSummary(
-        definitions.map(definition => ({ id: definition.id, category: definition.category, unit: definition.unit, name: definition.name })),
-        scopedRecords.map(record => ({ employeeId: record.employeeId, kpiDefinitionId: record.kpiDefinitionId, actualValue: record.actualValue, score: record.score, periodStart: record.periodStart })),
-        now,
-      );
-      return { categories, employees: employeesPerformance, attendance: dailyAttendance, sales, teamSize: team.length };
     }),
   }),
 
@@ -346,11 +277,6 @@ export const appRouter = router({
   }),
 
   attendance: router({
-    issueQr: managerProcedure.input(z.object({ branchId: z.number().int().positive(), action: z.enum(["check_in", "check_out"]) })).mutation(async ({ ctx, input }) => {
-      await assertBranchScope(ctx.user, input.branchId);
-      const { token, expiresAt } = await createAttendanceQrToken({ branchId: input.branchId, action: input.action }, ENV.cookieSecret);
-      return { token, expiresAt };
-    }),
     mineToday: protectedProcedure.query(async ({ ctx }) => {
       const db = await requireDb();
       const employee = await requireEmployeeProfile(ctx.user.id);
@@ -386,22 +312,6 @@ export const appRouter = router({
       const workedMinutes = Math.max(0, Math.floor((now.getTime() - record.checkInAt.getTime()) / 60000));
       await db.update(attendanceRecords).set({ checkOutAt: now, workedMinutes }).where(eq(attendanceRecords.id, record.id));
       return { success: true, workedMinutes };
-    }),
-    checkInByQr: protectedProcedure.input(z.object({ token: z.string().min(24).max(4096) })).mutation(async ({ ctx, input }) => {
-      try {
-        return await recordCheckInByQr({ token: input.token, userId: ctx.user.id, verify: token => verifyAttendanceQrToken(token, ENV.cookieSecret), repository: attendanceQrRepository(await requireDb()) });
-      } catch (error) {
-        if (error instanceof AttendanceQrWorkflowError) throw new TRPCError({ code: error.code, message: error.message });
-        throw error;
-      }
-    }),
-    checkOutByQr: protectedProcedure.input(z.object({ token: z.string().min(24).max(4096) })).mutation(async ({ ctx, input }) => {
-      try {
-        return await recordCheckOutByQr({ token: input.token, userId: ctx.user.id, verify: token => verifyAttendanceQrToken(token, ENV.cookieSecret), repository: attendanceQrRepository(await requireDb()) });
-      } catch (error) {
-        if (error instanceof AttendanceQrWorkflowError) throw new TRPCError({ code: error.code, message: error.message });
-        throw error;
-      }
     }),
     teamToday: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
       await assertBranchScope(ctx.user, input.branchId);
@@ -525,63 +435,6 @@ export const appRouter = router({
       await assertBranchScope(ctx.user, input.branchId);
       const db = await requireDb();
       return db.select().from(payrollRuns).where(eq(payrollRuns.branchId, input.branchId)).orderBy(desc(payrollRuns.year), desc(payrollRuns.month));
-    }),
-    submitForApproval: directManagerProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
-      const db = await requireDb();
-      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
-      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
-      await assertBranchScope(ctx.user, run.branchId);
-      if (run.status !== "draft" && run.status !== "rejected") throw new TRPCError({ code: "CONFLICT", message: "لا يمكن إرسال هذا المسير للاعتماد في حالته الحالية." });
-      await db.update(payrollRuns).set({ status: "pending_manager", approvedByEmployeeId: null, approvedAt: null }).where(eq(payrollRuns.id, run.id));
-      return { success: true, status: "pending_manager" as const };
-    }),
-    reviewByManager: directManagerProcedure.input(z.object({ payrollRunId: z.number().int().positive(), decision: z.enum(["approved", "rejected", "returned"]), note: z.string().trim().max(1000).optional() })).mutation(async ({ ctx, input }) => {
-      const db = await requireDb();
-      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
-      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
-      await assertBranchScope(ctx.user, run.branchId);
-      if (run.status !== "pending_manager") throw new TRPCError({ code: "CONFLICT", message: "هذا المسير لا ينتظر اعتماد المدير المباشر." });
-      const approverEmployeeId = await getOptionalEmployeeId(ctx.user.id);
-      await db.insert(payrollApprovals).values({ payrollRunId: run.id, approverEmployeeId, approvalStage: "manager", decision: input.decision, note: input.note || null });
-      const status = getNextPayrollStatus("manager", input.decision);
-      await db.update(payrollRuns).set({ status }).where(eq(payrollRuns.id, run.id));
-      return { success: true, status };
-    }),
-    reviewByHr: humanResourcesProcedure.input(z.object({ payrollRunId: z.number().int().positive(), decision: z.enum(["approved", "rejected", "returned"]), note: z.string().trim().max(1000).optional() })).mutation(async ({ ctx, input }) => {
-      const db = await requireDb();
-      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
-      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
-      if (ctx.user.role === "hr_manager") await assertBranchScope(ctx.user, run.branchId);
-      if (run.status !== "pending_hr") throw new TRPCError({ code: "CONFLICT", message: "هذا المسير لا ينتظر اعتماد الموارد البشرية." });
-      const approverEmployeeId = await getOptionalEmployeeId(ctx.user.id);
-      await db.insert(payrollApprovals).values({ payrollRunId: run.id, approverEmployeeId, approvalStage: "hr_manager", decision: input.decision, note: input.note || null });
-      const status = getNextPayrollStatus("hr_manager", input.decision);
-      await db.update(payrollRuns).set({ status, approvedByEmployeeId: input.decision === "approved" ? approverEmployeeId : null, approvedAt: input.decision === "approved" ? new Date() : null }).where(eq(payrollRuns.id, run.id));
-      return { success: true, status };
-    }),
-    approvalHistory: managerProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).query(async ({ ctx, input }) => {
-      const db = await requireDb();
-      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
-      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
-      await assertBranchScope(ctx.user, run.branchId);
-      return db.select({ approval: payrollApprovals, approver: employees }).from(payrollApprovals).leftJoin(employees, eq(payrollApprovals.approverEmployeeId, employees.id)).where(eq(payrollApprovals.payrollRunId, run.id)).orderBy(asc(payrollApprovals.createdAt));
-    }),
-    deliveryReadiness: managerProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).query(async ({ ctx, input }) => {
-      const db = await requireDb();
-      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
-      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
-      await assertBranchScope(ctx.user, run.branchId);
-      const rows = await db.select({ item: payrollItems, employee: employees }).from(payrollItems).innerJoin(employees, eq(payrollItems.employeeId, employees.id)).where(eq(payrollItems.payrollRunId, run.id)).orderBy(asc(employees.fullName));
-      const delivery = getPayrollDeliveryReadiness(run.status);
-      return { run: { id: run.id, status: run.status, delivery }, items: rows.map(({ item, employee }) => ({ employeeCode: employee.employeeCode, employeeName: employee.fullName, jobTitle: employee.jobTitle, netSalary: toNumber(item.netSalary), delivery })) };
-    }),
-    exportData: managerProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
-      const db = await requireDb();
-      const run = (await db.select().from(payrollRuns).where(eq(payrollRuns.id, input.payrollRunId)).limit(1))[0];
-      if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
-      await assertBranchScope(ctx.user, run.branchId);
-      const rows = await db.select({ item: payrollItems, employee: employees }).from(payrollItems).innerJoin(employees, eq(payrollItems.employeeId, employees.id)).where(eq(payrollItems.payrollRunId, run.id)).orderBy(asc(employees.fullName));
-      return { run, rows: rows.map(({ item, employee }) => ({ employeeCode: employee.employeeCode, employeeName: employee.fullName, jobTitle: employee.jobTitle, basicSalary: toNumber(item.basicSalary), allowances: toNumber(item.totalAllowances), kpiBonus: toNumber(item.kpiBonus), lateDeduction: toNumber(item.lateDeduction), absenceDeduction: toNumber(item.absenceDeduction), leaveDeduction: toNumber(item.leaveDeduction), netSalary: toNumber(item.netSalary) })) };
     }),
   }),
 });

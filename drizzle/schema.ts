@@ -13,7 +13,7 @@ import {
   varchar,
 } from "drizzle-orm/mysql-core";
 
-export const employeeRoleValues = ["user", "admin", "owner", "manager", "hr_manager", "pharmacist", "employee"] as const;
+export const employeeRoleValues = ["user", "admin", "owner", "manager", "pharmacist", "employee"] as const;
 export type EmployeeRole = (typeof employeeRoleValues)[number];
 
 export const users = mysqlTable("users", {
@@ -226,23 +226,11 @@ export const payrollRuns = mysqlTable("payrollRuns", {
   branchId: int("branchId").notNull().references(() => branches.id),
   year: int("year").notNull(),
   month: int("month").notNull(),
-  status: mysqlEnum("status", ["draft", "pending_manager", "pending_hr", "approved", "rejected", "paid"]).default("draft").notNull(),
+  status: mysqlEnum("status", ["draft", "approved", "paid"]).default("draft").notNull(),
   approvedByEmployeeId: int("approvedByEmployeeId").references(() => employees.id, { onDelete: "set null" }),
   approvedAt: timestamp("approvedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, table => [uniqueIndex("payroll_run_branch_period_unique").on(table.branchId, table.year, table.month)]);
-
-export const payrollApprovals = mysqlTable("payrollApprovals", {
-  id: int("id").autoincrement().primaryKey(),
-  payrollRunId: int("payrollRunId").notNull().references(() => payrollRuns.id, { onDelete: "cascade" }),
-  approverEmployeeId: int("approverEmployeeId").references(() => employees.id, { onDelete: "set null" }),
-  approvalStage: mysqlEnum("approvalStage", ["manager", "hr_manager", "owner_override"]).notNull(),
-  decision: mysqlEnum("decision", ["approved", "rejected", "returned"]).notNull(),
-  note: text("note"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, table => [
-  index("payroll_approvals_run_stage_idx").on(table.payrollRunId, table.approvalStage),
-]);
 
 export const payrollItems = mysqlTable("payrollItems", {
   id: int("id").autoincrement().primaryKey(),
