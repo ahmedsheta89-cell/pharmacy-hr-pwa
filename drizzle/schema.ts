@@ -68,6 +68,27 @@ export const employees = mysqlTable("employees", {
   index("employees_branch_idx").on(table.branchId),
 ]);
 
+export type EmployeeAuditChange = {
+  field: string;
+  label: string;
+  before: string | null;
+  after: string | null;
+};
+
+export const employeeAuditLogs = mysqlTable("employeeAuditLogs", {
+  id: int("id").autoincrement().primaryKey(),
+  employeeId: int("employeeId").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+  actorName: varchar("actorName", { length: 160 }),
+  action: mysqlEnum("action", ["created", "updated", "archived", "restored"]).notNull(),
+  changes: json("changes").$type<EmployeeAuditChange[]>().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("employeeAuditLogs_employee_created_idx").on(table.employeeId, table.createdAt),
+  index("employeeAuditLogs_branch_created_idx").on(table.branchId, table.createdAt),
+]);
+
 export const employeeCertificates = mysqlTable("employeeCertificates", {
   id: int("id").autoincrement().primaryKey(),
   employeeId: int("employeeId").notNull().references(() => employees.id, { onDelete: "cascade" }),

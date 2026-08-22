@@ -25,10 +25,12 @@ import {
 import { startLogin } from "@/const";
 import {
   BarChart3,
+  ArchiveRestore,
   CalendarDays,
   ChevronLeft,
   Clock3,
   LayoutDashboard,
+  History,
   LogOut,
   Pill,
   ReceiptText,
@@ -45,6 +47,8 @@ type AppRole = "owner" | "manager" | "pharmacist" | "employee";
 export const allNavigation = [
   { icon: LayoutDashboard, label: "نظرة عامة", path: "/", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: UsersRound, label: "الموظفون", path: "/employees", roles: ["owner", "manager"] as AppRole[] },
+  { icon: ArchiveRestore, label: "الموظفون المؤرشفون", path: "/archived-employees", roles: ["owner", "manager"] as AppRole[] },
+  { icon: History, label: "سجل التعديلات", path: "/employee-audit-log", roles: ["owner", "manager"] as AppRole[] },
   { icon: Clock3, label: "الحضور والانصراف", path: "/attendance", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: CalendarDays, label: "الورديات", path: "/shifts", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: ReceiptText, label: "الإجازات", path: "/leaves", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },

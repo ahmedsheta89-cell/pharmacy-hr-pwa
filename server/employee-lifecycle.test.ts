@@ -3,14 +3,24 @@ import type { TrpcContext } from "./_core/context";
 
 const fixture = vi.hoisted(() => {
   const updated: Record<string, unknown>[] = [];
+  const auditEvents: Record<string, unknown>[] = [];
+  const auditRows = [{ id: 31, employeeId: 7, action: "updated", actorUserId: 1, actorName: "اختبار", changes: [{ field: "fullName", label: "الاسم", before: "إبراهيم", after: "إبراهيم المعدل" }], createdAt: new Date("2026-08-22T09:00:00Z") }];
   const employee = { id: 7, userId: null, branchId: 1, employeeCode: "13", fullName: "إبراهيم", phone: null, email: null, jobTitle: "مساعد", role: "employee", hireDate: new Date("2026-08-06"), nationalId: null, employmentStatus: "active" };
   const employeeRows = [employee];
+  const query = {
+    limit: async () => employeeRows,
+    then: (resolve: (value: typeof employeeRows) => unknown) => Promise.resolve(employeeRows).then(resolve),
+    orderBy: async () => auditRows,
+  };
   return {
     updated,
+    auditEvents,
+    auditRows,
     employees: employeeRows,
     db: {
-      select: () => ({ from: () => ({ where: () => ({ limit: async () => employeeRows }) }) }),
+      select: () => ({ from: () => ({ where: () => query }) }),
       update: () => ({ set: (values: Record<string, unknown>) => ({ where: async () => { updated.push(values); } }) }),
+      insert: () => ({ values: async (values: Record<string, unknown>) => { auditEvents.push(values); } }),
     },
   };
 });
@@ -19,7 +29,7 @@ vi.mock("./db", () => ({ getDb: async () => fixture.db, getEmployeeByUserId: asy
 
 import { appRouter } from "./routers";
 
-function context(role: "owner" | "employee"): TrpcContext {
+function context(role: "owner" | "manager" | "employee"): TrpcContext {
   return { user: { id: 1, openId: `test-${role}`, name: "اختبار", email: "test@example.com", loginMethod: "test", role, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() }, req: { protocol: "https", headers: {} } as TrpcContext["req"], res: { clearCookie: () => undefined } as TrpcContext["res"] };
 }
 
@@ -32,8 +42,36 @@ describe("دورة حياة الموظف", () => {
 
   it("يؤرشف الموظف بدلاً من حذفه", async () => {
     fixture.updated.length = 0;
+    fixture.auditEvents.length = 0;
     await expect(appRouter.createCaller(context("owner")).employees.archive({ employeeId: 7 })).resolves.toEqual({ success: true });
     expect(fixture.updated[0]).toMatchObject({ employmentStatus: "inactive" });
+    expect(fixture.auditEvents[0]).toMatchObject({ employeeId: 7, action: "archived" });
+  });
+
+  it("يستعيد الموظف المؤرشف إلى الحالة النشطة مع تسجيل القرار", async () => {
+    fixture.updated.length = 0;
+    fixture.auditEvents.length = 0;
+    await expect(appRouter.createCaller(context("owner")).employees.restore({ employeeId: 7 })).resolves.toEqual({ success: true });
+    expect(fixture.updated[0]).toMatchObject({ employmentStatus: "active" });
+    expect(fixture.auditEvents[0]).toMatchObject({ employeeId: 7, action: "restored" });
+  });
+
+  it("يربط البحث والمرشحات والفرز بقائمة الموظفين", async () => {
+    const baseEmployee = fixture.employees[0];
+    fixture.employees.splice(0, fixture.employees.length,
+      { ...baseEmployee, id: 7, fullName: "إبراهيم", role: "employee", employmentStatus: "active" },
+      { ...baseEmployee, id: 8, fullName: "ليلى", employeeCode: "PH-08", jobTitle: "صيدلانية", role: "pharmacist", employmentStatus: "active" },
+      { ...baseEmployee, id: 9, fullName: "مروان", employeeCode: "PH-09", role: "pharmacist", employmentStatus: "on_leave" },
+    );
+    const result = await appRouter.createCaller(context("owner")).employees.list({ branchId: 1, search: "ليلى", role: "pharmacist", status: "active", sortBy: "name", sortDirection: "asc" });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: 8, fullName: "ليلى" });
+  });
+
+  it("يعرض سجل التدقيق للمالك والمدير ويمنع الموظف غير الإداري", async () => {
+    await expect(appRouter.createCaller(context("owner")).employees.auditLog({ employeeId: 7 })).resolves.toMatchObject([{ id: 31, action: "updated" }]);
+    await expect(appRouter.createCaller(context("manager")).employees.auditLog({ employeeId: 7 })).resolves.toMatchObject([{ id: 31, action: "updated" }]);
+    await expect(appRouter.createCaller(context("employee")).employees.auditLog({ employeeId: 7 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   it("يرفض تعديل الموظف من دور غير إداري", async () => {
