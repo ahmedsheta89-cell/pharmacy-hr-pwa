@@ -13,6 +13,8 @@ import {
   deliveryEvents,
   deliveryLocationPings,
   deliveryOrders,
+  deliveryProofImages,
+  deliveryZones,
   employeeAuditLogs,
   employeeCertificates,
   employees,
@@ -34,6 +36,7 @@ import {
 import { nanoid } from "nanoid";
 import { calculateKpiScore, calculatePayroll } from "../shared/hr-calculations";
 import { getDb, getEmployeeByUserId } from "./db";
+import { storageGet, storagePut } from "./storage";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -704,9 +707,11 @@ export const appRouter = router({
       const employee = await requireEmployeeProfile(ctx.user.id); const db = await requireDb();
       return db.select().from(deliveryOrders).where(eq(deliveryOrders.assignedEmployeeId, employee.id)).orderBy(desc(deliveryOrders.createdAt));
     }),
-    create: managerProcedure.input(z.object({ branchId: z.number().int().positive(), orderCode: z.string().trim().min(2).max(48), customerName: z.string().trim().min(2).max(160), customerPhone: z.string().trim().min(6).max(32), address: z.string().trim().min(5).max(2000), promisedAt: z.coerce.date().optional(), notes: z.string().trim().max(2000).optional() })).mutation(async ({ ctx, input }) => {
-      await assertBranchScope(ctx.user, input.branchId); const db = await requireDb();
-      const inserted = await db.insert(deliveryOrders).values({ ...input, promisedAt: input.promisedAt ?? null, notes: input.notes || null, status: "ready", createdByUserId: ctx.user.id });
+    create: managerProcedure.input(z.object({ branchId: z.number().int().positive(), deliveryZoneId: z.number().int().positive().optional(), orderCode: z.string().trim().min(2).max(48), customerName: z.string().trim().min(2).max(160), customerPhone: z.string().trim().min(6).max(32), address: z.string().trim().min(5).max(2000), promisedAt: z.coerce.date().optional(), notes: z.string().trim().max(2000).optional() })).mutation(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); let zone: typeof deliveryZones.$inferSelect | undefined;
+      if (input.deliveryZoneId) { zone = (await db.select().from(deliveryZones).where(eq(deliveryZones.id, input.deliveryZoneId)).limit(1))[0]; if (!zone || zone.branchId !== input.branchId || zone.isActive !== "yes") throw new TRPCError({ code: "BAD_REQUEST", message: "منطقة التوصيل غير صالحة أو مؤرشفة." }); }
+      const slaDueAt = input.promisedAt ?? (zone ? new Date(Date.now() + zone.slaMinutes * 60_000) : null);
+      const inserted = await db.insert(deliveryOrders).values({ ...input, deliveryZoneId: input.deliveryZoneId ?? null, promisedAt: input.promisedAt ?? null, slaDueAt, notes: input.notes || null, status: "ready", createdByUserId: ctx.user.id });
       const id = Number(inserted[0].insertId);
       await db.insert(deliveryEvents).values({ deliveryOrderId: id, action: "created", note: "تم إنشاء طلب التوصيل." });
       return { success: true, orderId: id };
@@ -743,7 +748,36 @@ export const appRouter = router({
       for (const row of rows) { let route = routes.find(item => item.orderId === row.orderId); if (!route) { route = { orderId: row.orderId, orderCode: row.orderCode, customerName: row.customerName, agentName: row.agentName, promisedAt: row.promisedAt, points: [] }; routes.push(route); } if (route.points.length < 50) route.points.unshift({ latitude: row.latitude, longitude: row.longitude, accuracyMeters: row.accuracyMeters, capturedAt: row.capturedAt }); }
       return routes;
     }),
-    summary: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => { await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const rows = await db.select().from(deliveryOrders).where(eq(deliveryOrders.branchId, input.branchId)); const today = startOfDay(); const trips = rows.filter(row => row.createdAt >= today); const delivered = trips.filter(row => row.status === "delivered"); const late = delivered.filter(row => row.promisedAt && row.deliveredAt && row.deliveredAt > row.promisedAt); return { dailyTrips: trips.length, delivered: delivered.length, delayed: late.length, active: rows.filter(row => row.status === "assigned" || row.status === "picked_up" || row.status === "en_route").length }; }),
+    zones: managerProcedure.input(z.object({ branchId: z.number().int().positive(), activeOnly: z.boolean().optional() })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const rows = await db.select().from(deliveryZones).where(eq(deliveryZones.branchId, input.branchId)).orderBy(asc(deliveryZones.name)); return input.activeOnly ? rows.filter(row => row.isActive === "yes") : rows;
+    }),
+    saveZone: managerProcedure.input(z.object({ id: z.number().int().positive().optional(), branchId: z.number().int().positive(), name: z.string().trim().min(2).max(160), code: z.string().trim().max(32).optional(), description: z.string().trim().max(2000).optional(), slaMinutes: z.number().int().min(5).max(1440), isActive: z.enum(["yes", "no"]).default("yes") })).mutation(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const values = { branchId: input.branchId, name: input.name, code: input.code || null, description: input.description || null, slaMinutes: input.slaMinutes, isActive: input.isActive };
+      if (input.id) { const current = (await db.select().from(deliveryZones).where(eq(deliveryZones.id, input.id)).limit(1))[0]; if (!current || current.branchId !== input.branchId) throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية تعديل هذه المنطقة." }); await db.update(deliveryZones).set(values).where(eq(deliveryZones.id, input.id)); return { success: true, id: input.id }; }
+      const result = await db.insert(deliveryZones).values(values); return { success: true, id: Number(result[0].insertId) };
+    }),
+    slaAlerts: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const now = new Date(); const warningAt = new Date(now.getTime() + 10 * 60_000); const rows = await db.select({ order: deliveryOrders, agentName: employees.fullName, zoneName: deliveryZones.name }).from(deliveryOrders).leftJoin(employees, eq(deliveryOrders.assignedEmployeeId, employees.id)).leftJoin(deliveryZones, eq(deliveryOrders.deliveryZoneId, deliveryZones.id)).where(eq(deliveryOrders.branchId, input.branchId));
+      return rows.filter(row => ["assigned", "picked_up", "en_route"].includes(row.order.status) && row.order.slaDueAt).map(row => ({ ...row, state: row.order.slaDueAt! <= now ? "breached" as const : row.order.slaDueAt! <= warningAt ? "at_risk" as const : "on_track" as const, minutesRemaining: Math.ceil((row.order.slaDueAt!.getTime() - now.getTime()) / 60_000) })).filter(row => row.state !== "on_track");
+    }),
+    weeklyReport: managerProcedure.input(z.object({ branchId: z.number().int().positive(), weekStart: z.coerce.date().optional() })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const today = input.weekStart ? new Date(input.weekStart) : new Date(); const day = today.getDay() || 7; const start = new Date(today); start.setDate(today.getDate() - day + 1); start.setHours(0, 0, 0, 0); const end = new Date(start); end.setDate(start.getDate() + 7);
+      const orders = await db.select({ order: deliveryOrders, employeeName: employees.fullName }).from(deliveryOrders).leftJoin(employees, eq(deliveryOrders.assignedEmployeeId, employees.id)).where(and(eq(deliveryOrders.branchId, input.branchId), gte(deliveryOrders.createdAt, start), lte(deliveryOrders.createdAt, end)));
+      const proofs = await db.select({ orderId: deliveryProofImages.deliveryOrderId }).from(deliveryProofImages).innerJoin(deliveryOrders, eq(deliveryProofImages.deliveryOrderId, deliveryOrders.id)).where(and(eq(deliveryOrders.branchId, input.branchId), gte(deliveryOrders.createdAt, start), lte(deliveryOrders.createdAt, end)));
+      const proofOrders = new Set(proofs.map(item => item.orderId)); const byCourier = new Map<number, { employeeId: number; employeeName: string; assigned: number; delivered: number; late: number; failed: number; proofCount: number; durationMinutes: number; durationSamples: number }>();
+      orders.forEach(({ order, employeeName }) => { if (!order.assignedEmployeeId) return; const item = byCourier.get(order.assignedEmployeeId) ?? { employeeId: order.assignedEmployeeId, employeeName: employeeName ?? "مندوب", assigned: 0, delivered: 0, late: 0, failed: 0, proofCount: 0, durationMinutes: 0, durationSamples: 0 }; item.assigned++; if (order.status === "delivered") { item.delivered++; if (order.slaDueAt && order.deliveredAt && order.deliveredAt > order.slaDueAt) item.late++; if (proofOrders.has(order.id)) item.proofCount++; if (order.pickedUpAt && order.deliveredAt) { item.durationMinutes += Math.max(0, Math.round((order.deliveredAt.getTime() - order.pickedUpAt.getTime()) / 60_000)); item.durationSamples++; } } if (["failed", "returned"].includes(order.status)) item.failed++; byCourier.set(item.employeeId, item); });
+      return { weekStart: start, weekEnd: end, couriers: Array.from(byCourier.values()).map(item => ({ ...item, completionRate: item.assigned ? Math.round((item.delivered / item.assigned) * 100) : 0, onTimeRate: item.delivered ? Math.round(((item.delivered - item.late) / item.delivered) * 100) : 0, proofRate: item.delivered ? Math.round((item.proofCount / item.delivered) * 100) : 0, averageDeliveryMinutes: item.durationSamples ? Math.round(item.durationMinutes / item.durationSamples) : null, efficiencyScore: item.assigned ? Math.round(((item.delivered / item.assigned) * 45) + (item.delivered ? ((item.delivered - item.late) / item.delivered) * 40 : 0) + (item.delivered ? (item.proofCount / item.delivered) * 15 : 0)) : 0 })).sort((a, b) => b.efficiencyScore - a.efficiencyScore) };
+    }),
+    uploadProof: protectedProcedure.input(z.object({ orderId: z.number().int().positive(), mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]), dataBase64: z.string().min(20).max(7_000_000), caption: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => {
+      const isManager = hasRole(ctx.user.role, managerRoles); const employee = isManager ? null : await requireEmployeeProfile(ctx.user.id); const db = await requireDb(); const order = (await db.select().from(deliveryOrders).where(eq(deliveryOrders.id, input.orderId)).limit(1))[0]; if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "طلب التوصيل غير موجود." });
+      if (isManager) await assertBranchScope(ctx.user, order.branchId); else if (order.assignedEmployeeId !== employee!.id) throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية إثبات هذا الطلب." });
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.dataBase64)) throw new TRPCError({ code: "BAD_REQUEST", message: "بيانات الصورة غير صالحة." }); const bytes = Buffer.from(input.dataBase64, "base64"); if (!bytes.length || bytes.length > 5 * 1024 * 1024) throw new TRPCError({ code: "BAD_REQUEST", message: "يجب ألا تتجاوز صورة الإثبات 5 ميجابايت." }); const extension = input.mimeType === "image/jpeg" ? "jpg" : input.mimeType.split("/")[1]; const stored = await storagePut(`delivery-proofs/${order.branchId}/${order.id}/${Date.now()}.${extension}`, bytes, input.mimeType);
+      const result = await db.insert(deliveryProofImages).values({ deliveryOrderId: order.id, storageKey: stored.key, mimeType: input.mimeType, caption: input.caption || null, uploadedByEmployeeId: employee?.id ?? null }); return { success: true, id: Number(result[0].insertId) };
+    }),
+    proofs: protectedProcedure.input(z.object({ orderId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const isManager = hasRole(ctx.user.role, managerRoles); const employee = isManager ? null : await requireEmployeeProfile(ctx.user.id); const db = await requireDb(); const order = (await db.select().from(deliveryOrders).where(eq(deliveryOrders.id, input.orderId)).limit(1))[0]; if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "طلب التوصيل غير موجود." }); if (isManager) await assertBranchScope(ctx.user, order.branchId); else if (order.assignedEmployeeId !== employee!.id) throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية عرض إثبات هذا الطلب." }); const rows = await db.select().from(deliveryProofImages).where(eq(deliveryProofImages.deliveryOrderId, order.id)).orderBy(desc(deliveryProofImages.createdAt)); return Promise.all(rows.map(async row => ({ ...row, url: (await storageGet(row.storageKey)).url })));
+    }),
+    summary: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => { await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const rows = await db.select().from(deliveryOrders).where(eq(deliveryOrders.branchId, input.branchId)); const today = startOfDay(); const trips = rows.filter(row => row.createdAt >= today); const delivered = trips.filter(row => row.status === "delivered"); const late = delivered.filter(row => row.slaDueAt && row.deliveredAt && row.deliveredAt > row.slaDueAt); return { dailyTrips: trips.length, delivered: delivered.length, delayed: late.length, active: rows.filter(row => row.status === "assigned" || row.status === "picked_up" || row.status === "en_route").length }; }),
   }),
 
   chat: router({

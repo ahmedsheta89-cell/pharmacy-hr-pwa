@@ -25,4 +25,16 @@ describe("delivery and chat access control", () => {
     const caller = appRouter.createCaller(employeeContext());
     await expect(caller.delivery.liveRoutes({ branchId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("blocks a regular account from zones, SLA alerts, and weekly performance", async () => {
+    const caller = appRouter.createCaller(employeeContext());
+    await expect(caller.delivery.zones({ branchId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.delivery.slaAlerts({ branchId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.delivery.weeklyReport({ branchId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("does not disclose delivery proof metadata for an arbitrary order", async () => {
+    const caller = appRouter.createCaller(employeeContext());
+    await expect(caller.delivery.proofs({ orderId: 999_999 })).rejects.toMatchObject({ code: expect.stringMatching(/FORBIDDEN|NOT_FOUND/) });
+  });
 });
