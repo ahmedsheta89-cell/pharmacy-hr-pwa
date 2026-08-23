@@ -20,4 +20,9 @@ describe("delivery and chat access control", () => {
     const caller = appRouter.createCaller(employeeContext());
     await expect(caller.chat.inbox()).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
+
+  it("blocks a regular account from live delivery location routes", async () => {
+    const caller = appRouter.createCaller(employeeContext());
+    await expect(caller.delivery.liveRoutes({ branchId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });
