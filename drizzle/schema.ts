@@ -328,6 +328,123 @@ export const accountLinkLogs = mysqlTable("accountLinkLogs", {
   index("accountLinkLogs_branch_created_idx").on(table.branchId, table.createdAt),
 ]);
 
+export const attendancePolicies = mysqlTable("attendancePolicies", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  graceMinutes: int("graceMinutes").default(15).notNull(),
+  lateMultiplier: decimal("lateMultiplier", { precision: 4, scale: 2 }).default("1.00").notNull(),
+  monthlyLateMinuteCap: int("monthlyLateMinuteCap"),
+  pointsPerLateOccurrence: int("pointsPerLateOccurrence").default(0).notNull(),
+  isActive: mysqlEnum("isActive", ["yes", "no"]).default("yes").notNull(),
+  updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("attendance_policy_branch_unique").on(table.branchId)]);
+
+export const deliveryOrders = mysqlTable("deliveryOrders", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  orderCode: varchar("orderCode", { length: 48 }).notNull(),
+  customerName: varchar("customerName", { length: 160 }).notNull(),
+  customerPhone: varchar("customerPhone", { length: 32 }).notNull(),
+  address: text("address").notNull(),
+  destinationLatitude: decimal("destinationLatitude", { precision: 10, scale: 7 }),
+  destinationLongitude: decimal("destinationLongitude", { precision: 10, scale: 7 }),
+  promisedAt: timestamp("promisedAt"),
+  status: mysqlEnum("status", ["draft", "ready", "assigned", "picked_up", "en_route", "delivered", "failed", "returned", "cancelled"]).default("draft").notNull(),
+  assignedEmployeeId: int("assignedEmployeeId").references(() => employees.id, { onDelete: "set null" }),
+  pickedUpAt: timestamp("pickedUpAt"),
+  deliveredAt: timestamp("deliveredAt"),
+  proofNote: text("proofNote"),
+  exceptionReason: text("exceptionReason"),
+  notes: text("notes"),
+  createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  uniqueIndex("delivery_orders_branch_code_unique").on(table.branchId, table.orderCode),
+  index("delivery_orders_branch_status_idx").on(table.branchId, table.status),
+  index("delivery_orders_employee_status_idx").on(table.assignedEmployeeId, table.status),
+]);
+
+export const deliveryEvents = mysqlTable("deliveryEvents", {
+  id: int("id").autoincrement().primaryKey(),
+  deliveryOrderId: int("deliveryOrderId").notNull().references(() => deliveryOrders.id, { onDelete: "cascade" }),
+  actorEmployeeId: int("actorEmployeeId").references(() => employees.id, { onDelete: "set null" }),
+  action: mysqlEnum("action", ["created", "assigned", "picked_up", "en_route", "delivered", "failed", "returned", "cancelled", "note"]).notNull(),
+  note: text("note"),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  accuracyMeters: int("accuracyMeters"),
+  occurredAt: timestamp("occurredAt").defaultNow().notNull(),
+}, table => [index("delivery_events_order_time_idx").on(table.deliveryOrderId, table.occurredAt)]);
+
+export const deliveryLocationPings = mysqlTable("deliveryLocationPings", {
+  id: int("id").autoincrement().primaryKey(),
+  deliveryOrderId: int("deliveryOrderId").notNull().references(() => deliveryOrders.id, { onDelete: "cascade" }),
+  employeeId: int("employeeId").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }).notNull(),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }).notNull(),
+  accuracyMeters: int("accuracyMeters"),
+  capturedAt: timestamp("capturedAt").defaultNow().notNull(),
+}, table => [index("delivery_pings_order_time_idx").on(table.deliveryOrderId, table.capturedAt)]);
+
+export const chatConversations = mysqlTable("chatConversations", {
+  id: int("id").autoincrement().primaryKey(),
+  publicToken: varchar("publicToken", { length: 64 }).notNull(),
+  branchId: int("branchId").references(() => branches.id, { onDelete: "set null" }),
+  customerName: varchar("customerName", { length: 160 }).notNull(),
+  customerPhone: varchar("customerPhone", { length: 32 }).notNull(),
+  subject: varchar("subject", { length: 220 }),
+  status: mysqlEnum("status", ["open", "pending", "closed"]).default("open").notNull(),
+  assignedUserId: int("assignedUserId").references(() => users.id, { onDelete: "set null" }),
+  lastMessageAt: timestamp("lastMessageAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [uniqueIndex("chat_conversations_public_token_unique").on(table.publicToken), index("chat_conversations_status_time_idx").on(table.status, table.lastMessageAt)]);
+
+export const chatMessages = mysqlTable("chatMessages", {
+  id: int("id").autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull().references(() => chatConversations.id, { onDelete: "cascade" }),
+  sender: mysqlEnum("sender", ["customer", "agent", "system"]).notNull(),
+  body: text("body").notNull(),
+  authorUserId: int("authorUserId").references(() => users.id, { onDelete: "set null" }),
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("chat_messages_conversation_time_idx").on(table.conversationId, table.createdAt)]);
+
+export const faqEntries = mysqlTable("faqEntries", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").references(() => branches.id, { onDelete: "cascade" }),
+  question: varchar("question", { length: 300 }).notNull(),
+  answer: text("answer").notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  isActive: mysqlEnum("isActive", ["yes", "no"]).default("yes").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [index("faq_branch_active_idx").on(table.branchId, table.isActive)]);
+
+export const quickReplies = mysqlTable("quickReplies", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").references(() => branches.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 160 }).notNull(),
+  body: text("body").notNull(),
+  isActive: mysqlEnum("isActive", ["yes", "no"]).default("yes").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [index("quick_replies_branch_active_idx").on(table.branchId, table.isActive)]);
+
+export const customerContactLogs = mysqlTable("customerContactLogs", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").references(() => branches.id, { onDelete: "set null" }),
+  conversationId: int("conversationId").references(() => chatConversations.id, { onDelete: "set null" }),
+  customerPhone: varchar("customerPhone", { length: 32 }).notNull(),
+  channel: mysqlEnum("channel", ["whatsapp_link"]).notNull(),
+  body: text("body").notNull(),
+  actorUserId: int("actorUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("contact_logs_phone_time_idx").on(table.customerPhone, table.createdAt)]);
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type Employee = typeof employees.$inferSelect;
