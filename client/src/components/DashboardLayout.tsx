@@ -41,6 +41,8 @@ import {
   Sparkles,
   UsersRound,
   WalletCards,
+  Truck,
+  MessageCircleMore,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -57,6 +59,8 @@ export const allNavigation = [
   { icon: ReceiptText, label: "الإجازات", path: "/leaves", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: BarChart3, label: "مؤشرات الأداء", path: "/kpis", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
   { icon: WalletCards, label: "الرواتب", path: "/payroll", roles: ["owner", "manager", "hr_manager"] as AppRole[] },
+  { icon: Truck, label: "التوصيل", path: "/delivery", roles: ["owner", "manager", "pharmacist", "employee"] as AppRole[] },
+  { icon: MessageCircleMore, label: "رسائل العملاء", path: "/customer-messages", roles: ["owner", "manager"] as AppRole[] },
 ];
 
 const roleLabels: Record<AppRole, string> = {

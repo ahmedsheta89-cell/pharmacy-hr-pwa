@@ -5,10 +5,18 @@ import {
   accountLinkLogs,
   accountLinkRequests,
   attendanceRecords,
+  attendancePolicies,
   branches,
+  chatConversations,
+  chatMessages,
+  customerContactLogs,
+  deliveryEvents,
+  deliveryLocationPings,
+  deliveryOrders,
   employeeAuditLogs,
   employeeCertificates,
   employees,
+  faqEntries,
   kpiDefinitions,
   kpiRecords,
   leaveBalances,
@@ -17,11 +25,13 @@ import {
   payrollApprovals,
   payrollItems,
   payrollRuns,
+  quickReplies,
   salaryStructures,
   shiftAssignments,
   shifts,
   users,
 } from "../drizzle/schema";
+import { nanoid } from "nanoid";
 import { calculateKpiScore, calculatePayroll } from "../shared/hr-calculations";
 import { getDb, getEmployeeByUserId } from "./db";
 import { COOKIE_NAME } from "@shared/const";
@@ -35,6 +45,7 @@ const managerRoles = ["admin", "owner", "manager"] as const;
 const payrollRoles = ["admin", "owner", "manager", "hr_manager"] as const;
 const employeeStatusValues = ["active", "inactive", "on_leave"] as const;
 const accountLinkRequestStatusValues = ["pending", "approved", "rejected", "cancelled"] as const;
+const deliveryStatusValues = ["draft", "ready", "assigned", "picked_up", "en_route", "delivered", "failed", "returned", "cancelled"] as const;
 const employeeFieldLabels: Record<string, string> = { employeeCode: "الكود الوظيفي", fullName: "الاسم", phone: "الهاتف", email: "البريد الإلكتروني", jobTitle: "المسمى الوظيفي", role: "الدور", hireDate: "تاريخ التعيين", nationalId: "الرقم القومي", employmentStatus: "حالة الملف" };
 
 function auditValue(field: string, value: unknown) {
@@ -561,8 +572,11 @@ export const appRouter = router({
       const workDate = startOfDay(now);
       const existing = (await db.select().from(attendanceRecords).where(and(eq(attendanceRecords.employeeId, employee.id), eq(attendanceRecords.workDate, workDate))).limit(1))[0];
       if (existing?.checkInAt) throw new TRPCError({ code: "CONFLICT", message: "تم تسجيل الحضور بالفعل اليوم." });
-      const assignment = (await db.select({ assignmentId: shiftAssignments.id, startTime: shifts.startTime, graceMinutes: shifts.graceMinutes }).from(shiftAssignments).innerJoin(shifts, eq(shiftAssignments.shiftId, shifts.id)).where(and(eq(shiftAssignments.employeeId, employee.id), eq(shiftAssignments.workDate, workDate))).limit(1))[0];
-      const lateMinutes = assignment ? lateMinutesFromSchedule(now, workDate, String(assignment.startTime), assignment.graceMinutes) : 0;
+      const [assignment, policy] = await Promise.all([
+        db.select({ assignmentId: shiftAssignments.id, startTime: shifts.startTime, graceMinutes: shifts.graceMinutes }).from(shiftAssignments).innerJoin(shifts, eq(shiftAssignments.shiftId, shifts.id)).where(and(eq(shiftAssignments.employeeId, employee.id), eq(shiftAssignments.workDate, workDate))).limit(1).then(rows => rows[0]),
+        db.select().from(attendancePolicies).where(eq(attendancePolicies.branchId, employee.branchId)).limit(1).then(rows => rows[0]),
+      ]);
+      const lateMinutes = assignment ? lateMinutesFromSchedule(now, workDate, String(assignment.startTime), policy?.isActive === "yes" ? policy.graceMinutes : assignment.graceMinutes) : 0;
       const status = lateMinutes > 0 ? "late" : "present" as const;
       if (existing) {
         await db.update(attendanceRecords).set({ checkInAt: now, lateMinutes, status, shiftAssignmentId: assignment?.assignmentId ?? null }).where(eq(attendanceRecords.id, existing.id));
@@ -664,6 +678,81 @@ export const appRouter = router({
     }),
   }),
 
+  policies: router({
+    attendance: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      return (await db.select().from(attendancePolicies).where(eq(attendancePolicies.branchId, input.branchId)).limit(1))[0] ?? null;
+    }),
+    saveAttendance: managerProcedure.input(z.object({ branchId: z.number().int().positive(), graceMinutes: z.number().int().min(0).max(120), lateMultiplier: z.number().min(1).max(5), monthlyLateMinuteCap: z.number().int().min(1).max(2000).nullable().optional(), pointsPerLateOccurrence: z.number().int().min(0).max(20) })).mutation(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      const values = { ...input, lateMultiplier: String(input.lateMultiplier), monthlyLateMinuteCap: input.monthlyLateMinuteCap ?? null, updatedByUserId: ctx.user.id };
+      await db.insert(attendancePolicies).values(values).onDuplicateKeyUpdate({ set: values });
+      return { success: true };
+    }),
+  }),
+
+  delivery: router({
+    list: managerProcedure.input(z.object({ branchId: z.number().int().positive(), status: z.enum(deliveryStatusValues).optional() })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      const rows = await db.select({ order: deliveryOrders, agentName: employees.fullName }).from(deliveryOrders).leftJoin(employees, eq(deliveryOrders.assignedEmployeeId, employees.id)).where(eq(deliveryOrders.branchId, input.branchId)).orderBy(desc(deliveryOrders.createdAt));
+      return input.status ? rows.filter(row => row.order.status === input.status) : rows;
+    }),
+    mine: protectedProcedure.query(async ({ ctx }) => {
+      const employee = await requireEmployeeProfile(ctx.user.id); const db = await requireDb();
+      return db.select().from(deliveryOrders).where(eq(deliveryOrders.assignedEmployeeId, employee.id)).orderBy(desc(deliveryOrders.createdAt));
+    }),
+    create: managerProcedure.input(z.object({ branchId: z.number().int().positive(), orderCode: z.string().trim().min(2).max(48), customerName: z.string().trim().min(2).max(160), customerPhone: z.string().trim().min(6).max(32), address: z.string().trim().min(5).max(2000), promisedAt: z.coerce.date().optional(), notes: z.string().trim().max(2000).optional() })).mutation(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId); const db = await requireDb();
+      const inserted = await db.insert(deliveryOrders).values({ ...input, promisedAt: input.promisedAt ?? null, notes: input.notes || null, status: "ready", createdByUserId: ctx.user.id });
+      const id = Number(inserted[0].insertId);
+      await db.insert(deliveryEvents).values({ deliveryOrderId: id, action: "created", note: "تم إنشاء طلب التوصيل." });
+      return { success: true, orderId: id };
+    }),
+    assign: managerProcedure.input(z.object({ orderId: z.number().int().positive(), employeeId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb(); const order = (await db.select().from(deliveryOrders).where(eq(deliveryOrders.id, input.orderId)).limit(1))[0]; const employee = (await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
+      if (!order || !employee || employee.branchId !== order.branchId) throw new TRPCError({ code: "BAD_REQUEST", message: "الطلب أو المندوب غير صالحين." });
+      await assertBranchScope(ctx.user, order.branchId);
+      await db.update(deliveryOrders).set({ assignedEmployeeId: employee.id, status: "assigned" }).where(eq(deliveryOrders.id, order.id));
+      await db.insert(deliveryEvents).values({ deliveryOrderId: order.id, actorEmployeeId: employee.id, action: "assigned", note: "تم تعيين المندوب." });
+      return { success: true };
+    }),
+    updateStatus: protectedProcedure.input(z.object({ orderId: z.number().int().positive(), status: z.enum(["picked_up", "en_route", "delivered", "failed", "returned"]), note: z.string().trim().max(1000).optional(), latitude: z.number().min(-90).max(90).optional(), longitude: z.number().min(-180).max(180).optional(), accuracyMeters: z.number().int().min(0).max(10000).optional() })).mutation(async ({ ctx, input }) => {
+      const employee = await requireEmployeeProfile(ctx.user.id); const db = await requireDb(); const order = (await db.select().from(deliveryOrders).where(eq(deliveryOrders.id, input.orderId)).limit(1))[0];
+      if (!order || order.assignedEmployeeId !== employee.id) throw new TRPCError({ code: "FORBIDDEN", message: "هذا الطلب غير مسند إليك." });
+      if ((input.status === "delivered" || input.status === "failed" || input.status === "returned") && !input.note) throw new TRPCError({ code: "BAD_REQUEST", message: "أدخل ملاحظة أو إثباتاً لإغلاق الطلب." });
+      const now = new Date(); const update: Record<string, unknown> = { status: input.status };
+      if (input.status === "picked_up") update.pickedUpAt = now;
+      if (input.status === "delivered") { update.deliveredAt = now; update.proofNote = input.note; }
+      if (input.status === "failed" || input.status === "returned") update.exceptionReason = input.note;
+      await db.update(deliveryOrders).set(update).where(eq(deliveryOrders.id, order.id));
+      await db.insert(deliveryEvents).values({ deliveryOrderId: order.id, actorEmployeeId: employee.id, action: input.status, note: input.note || null, latitude: input.latitude ? String(input.latitude) : null, longitude: input.longitude ? String(input.longitude) : null, accuracyMeters: input.accuracyMeters ?? null });
+      return { success: true };
+    }),
+    pingLocation: protectedProcedure.input(z.object({ orderId: z.number().int().positive(), latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180), accuracyMeters: z.number().int().min(0).max(10000).optional() })).mutation(async ({ ctx, input }) => {
+      const employee = await requireEmployeeProfile(ctx.user.id); const db = await requireDb(); const order = (await db.select().from(deliveryOrders).where(eq(deliveryOrders.id, input.orderId)).limit(1))[0];
+      if (!order || order.assignedEmployeeId !== employee.id || order.status !== "en_route") throw new TRPCError({ code: "FORBIDDEN", message: "يُسمح بتحديث الموقع أثناء رحلة نشطة مسندة إليك فقط." });
+      await db.insert(deliveryLocationPings).values({ deliveryOrderId: order.id, employeeId: employee.id, latitude: String(input.latitude), longitude: String(input.longitude), accuracyMeters: input.accuracyMeters ?? null }); return { success: true };
+    }),
+    summary: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => { await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const rows = await db.select().from(deliveryOrders).where(eq(deliveryOrders.branchId, input.branchId)); const today = startOfDay(); const trips = rows.filter(row => row.createdAt >= today); const delivered = trips.filter(row => row.status === "delivered"); const late = delivered.filter(row => row.promisedAt && row.deliveredAt && row.deliveredAt > row.promisedAt); return { dailyTrips: trips.length, delivered: delivered.length, delayed: late.length, active: rows.filter(row => row.status === "assigned" || row.status === "picked_up" || row.status === "en_route").length }; }),
+  }),
+
+  chat: router({
+    faq: publicProcedure.query(async () => { const db = await requireDb(); return db.select().from(faqEntries).where(eq(faqEntries.isActive, "yes")).orderBy(asc(faqEntries.sortOrder)); }),
+    start: publicProcedure.input(z.object({ customerName: z.string().trim().min(2).max(160), customerPhone: z.string().trim().min(6).max(32), subject: z.string().trim().max(220).optional(), body: z.string().trim().min(2).max(2000) })).mutation(async ({ input }) => { const db = await requireDb(); const token = nanoid(32); const inserted = await db.insert(chatConversations).values({ publicToken: token, customerName: input.customerName, customerPhone: input.customerPhone, subject: input.subject || null }); const conversationId = Number(inserted[0].insertId); await db.insert(chatMessages).values({ conversationId, sender: "customer", body: input.body }); return { token }; }),
+    mine: publicProcedure.input(z.object({ token: z.string().min(20).max(64) })).query(async ({ input }) => { const db = await requireDb(); const conversation = (await db.select().from(chatConversations).where(eq(chatConversations.publicToken, input.token)).limit(1))[0]; if (!conversation) throw new TRPCError({ code: "NOT_FOUND", message: "لم يتم العثور على المحادثة." }); const messages = await db.select().from(chatMessages).where(eq(chatMessages.conversationId, conversation.id)).orderBy(asc(chatMessages.createdAt)); return { conversation, messages }; }),
+    send: publicProcedure.input(z.object({ token: z.string().min(20).max(64), body: z.string().trim().min(1).max(2000) })).mutation(async ({ input }) => { const db = await requireDb(); const conversation = (await db.select().from(chatConversations).where(eq(chatConversations.publicToken, input.token)).limit(1))[0]; if (!conversation || conversation.status === "closed") throw new TRPCError({ code: "FORBIDDEN", message: "هذه المحادثة مغلقة." }); await db.insert(chatMessages).values({ conversationId: conversation.id, sender: "customer", body: input.body }); await db.update(chatConversations).set({ status: "open", lastMessageAt: new Date() }).where(eq(chatConversations.id, conversation.id)); return { success: true }; }),
+    inbox: managerProcedure.query(async () => { const db = await requireDb(); return db.select().from(chatConversations).orderBy(desc(chatConversations.lastMessageAt)); }),
+    reply: managerProcedure.input(z.object({ conversationId: z.number().int().positive(), body: z.string().trim().min(1).max(2000), status: z.enum(["open", "pending", "closed"]).optional() })).mutation(async ({ ctx, input }) => { const db = await requireDb(); const conversation = (await db.select().from(chatConversations).where(eq(chatConversations.id, input.conversationId)).limit(1))[0]; if (!conversation) throw new TRPCError({ code: "NOT_FOUND", message: "المحادثة غير موجودة." }); await db.insert(chatMessages).values({ conversationId: conversation.id, sender: "agent", body: input.body, authorUserId: ctx.user.id }); await db.update(chatConversations).set({ assignedUserId: ctx.user.id, status: input.status ?? "pending", lastMessageAt: new Date() }).where(eq(chatConversations.id, conversation.id)); return { success: true }; }),
+    quickReplies: managerProcedure.query(async () => { const db = await requireDb(); return db.select().from(quickReplies).orderBy(desc(quickReplies.updatedAt)); }),
+    saveQuickReply: managerProcedure.input(z.object({ id: z.number().int().positive().optional(), title: z.string().trim().min(2).max(160), body: z.string().trim().min(2).max(2000), isActive: z.enum(["yes", "no"]).default("yes") })).mutation(async ({ ctx, input }) => { const db = await requireDb(); const profile = await requireEmployeeProfile(ctx.user.id); if (input.id) { const current = (await db.select().from(quickReplies).where(eq(quickReplies.id, input.id)).limit(1))[0]; if (!current || (current.branchId && current.branchId !== profile.branchId && !hasRole(ctx.user.role, ownerRoles))) throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية تعديل هذا الرد." }); await db.update(quickReplies).set({ title: input.title, body: input.body, isActive: input.isActive }).where(eq(quickReplies.id, input.id)); } else await db.insert(quickReplies).values({ branchId: profile.branchId, title: input.title, body: input.body, isActive: input.isActive }); return { success: true }; }),
+    faqAdmin: managerProcedure.query(async ({ ctx }) => { const db = await requireDb(); const profile = await requireEmployeeProfile(ctx.user.id); const rows = await db.select().from(faqEntries).orderBy(asc(faqEntries.sortOrder)); return hasRole(ctx.user.role, ownerRoles) ? rows : rows.filter(row => row.branchId === profile.branchId); }),
+    saveFaq: managerProcedure.input(z.object({ id: z.number().int().positive().optional(), question: z.string().trim().min(4).max(300), answer: z.string().trim().min(4).max(4000), sortOrder: z.number().int().min(0).max(999).default(0), isActive: z.enum(["yes", "no"]).default("yes") })).mutation(async ({ ctx, input }) => { const db = await requireDb(); const profile = await requireEmployeeProfile(ctx.user.id); if (input.id) { const current = (await db.select().from(faqEntries).where(eq(faqEntries.id, input.id)).limit(1))[0]; if (!current || (current.branchId && current.branchId !== profile.branchId && !hasRole(ctx.user.role, ownerRoles))) throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية تعديل هذا السؤال." }); await db.update(faqEntries).set({ question: input.question, answer: input.answer, sortOrder: input.sortOrder, isActive: input.isActive }).where(eq(faqEntries.id, input.id)); } else await db.insert(faqEntries).values({ branchId: profile.branchId, question: input.question, answer: input.answer, sortOrder: input.sortOrder, isActive: input.isActive }); return { success: true }; }),
+    whatsappLink: managerProcedure.input(z.object({ phone: z.string().trim().min(6).max(32), body: z.string().trim().min(2).max(2000), conversationId: z.number().int().positive().optional() })).mutation(async ({ ctx, input }) => { const db = await requireDb(); const profile = await requireEmployeeProfile(ctx.user.id); const normalized = input.phone.replace(/\D/g, ""); if (normalized.length < 8) throw new TRPCError({ code: "BAD_REQUEST", message: "رقم WhatsApp غير صالح." }); await db.insert(customerContactLogs).values({ branchId: profile.branchId, conversationId: input.conversationId ?? null, customerPhone: input.phone, channel: "whatsapp_link", body: input.body, actorUserId: ctx.user.id }); return { url: `https://wa.me/${normalized}?text=${encodeURIComponent(input.body)}` }; }),
+  }),
+
   payroll: router({
     configureSalary: managerProcedure.input(z.object({ employeeId: z.number().int().positive(), basicSalary: z.number().positive(), housingAllowance: z.number().min(0).default(0), transportationAllowance: z.number().min(0).default(0), otherAllowances: z.number().min(0).default(0), maximumKpiBonus: z.number().min(0).default(0), lateDeductionPerMinute: z.number().min(0).default(0), effectiveFrom: z.coerce.date() })).mutation(async ({ ctx, input }) => {
       const db = await requireDb();
@@ -684,6 +773,7 @@ export const appRouter = router({
       const from = new Date(input.year, input.month - 1, 1);
       const to = new Date(input.year, input.month, 0);
       const team = await db.select().from(employees).where(and(eq(employees.branchId, input.branchId), eq(employees.employmentStatus, "active")));
+      const policy = (await db.select().from(attendancePolicies).where(eq(attendancePolicies.branchId, input.branchId)).limit(1))[0];
       let createdItems = 0;
       for (const employee of team) {
         const salary = (await db.select().from(salaryStructures).where(and(eq(salaryStructures.employeeId, employee.id), lte(salaryStructures.effectiveFrom, to))).orderBy(desc(salaryStructures.effectiveFrom)).limit(1))[0];
@@ -693,10 +783,12 @@ export const appRouter = router({
           db.select().from(kpiRecords).where(and(eq(kpiRecords.employeeId, employee.id), gte(kpiRecords.periodStart, from), lte(kpiRecords.periodEnd, to))),
         ]);
         const absentDays = attendance.filter(record => record.status === "absent").length;
-        const lateMinutes = attendance.reduce((total, record) => total + record.lateMinutes, 0);
+        const rawLateMinutes = attendance.reduce((total, record) => total + record.lateMinutes, 0);
+        const multipliedLateMinutes = policy?.isActive === "yes" ? Math.ceil(rawLateMinutes * toNumber(policy.lateMultiplier)) : rawLateMinutes;
+        const lateMinutes = policy?.monthlyLateMinuteCap ? Math.min(multipliedLateMinutes, policy.monthlyLateMinuteCap) : multipliedLateMinutes;
         const kpiScore = performance.length === 0 ? 0 : performance.reduce((total, record) => total + toNumber(record.score), 0) / performance.length;
         const calculation = calculatePayroll({ basicSalary: toNumber(salary.basicSalary), allowances: toNumber(salary.housingAllowance) + toNumber(salary.transportationAllowance) + toNumber(salary.otherAllowances), workingDaysInMonth: input.workingDaysInMonth, absentDays, lateMinutes, lateDeductionPerMinute: toNumber(salary.lateDeductionPerMinute), leaveDeduction: 0, kpiScore, maximumKpiBonus: toNumber(salary.maximumKpiBonus) });
-        await db.insert(payrollItems).values({ payrollRunId: run.id, employeeId: employee.id, basicSalary: String(salary.basicSalary), totalAllowances: String(toNumber(salary.housingAllowance) + toNumber(salary.transportationAllowance) + toNumber(salary.otherAllowances)), kpiScore: String(kpiScore), kpiBonus: String(calculation.kpiBonus), lateDeduction: String(calculation.lateDeduction), absenceDeduction: String(calculation.absenceDeduction), leaveDeduction: "0", netSalary: String(calculation.netSalary), calculationSnapshot: { period: { year: input.year, month: input.month }, absentDays, lateMinutes, kpiScore, ...calculation } });
+        await db.insert(payrollItems).values({ payrollRunId: run.id, employeeId: employee.id, basicSalary: String(salary.basicSalary), totalAllowances: String(toNumber(salary.housingAllowance) + toNumber(salary.transportationAllowance) + toNumber(salary.otherAllowances)), kpiScore: String(kpiScore), kpiBonus: String(calculation.kpiBonus), lateDeduction: String(calculation.lateDeduction), absenceDeduction: String(calculation.absenceDeduction), leaveDeduction: "0", netSalary: String(calculation.netSalary), calculationSnapshot: { period: { year: input.year, month: input.month }, absentDays, rawLateMinutes, lateMinutes, latePolicy: policy ? { graceMinutes: policy.graceMinutes, lateMultiplier: toNumber(policy.lateMultiplier), monthlyLateMinuteCap: policy.monthlyLateMinuteCap } : null, kpiScore, ...calculation } });
         createdItems += 1;
       }
       return { success: true, payrollRunId: run.id, createdItems };
