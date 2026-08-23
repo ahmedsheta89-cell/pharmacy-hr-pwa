@@ -344,6 +344,7 @@ export const attendancePolicies = mysqlTable("attendancePolicies", {
 export const deliveryOrders = mysqlTable("deliveryOrders", {
   id: int("id").autoincrement().primaryKey(),
   branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  deliveryZoneId: int("deliveryZoneId").references(() => deliveryZones.id, { onDelete: "set null" }),
   orderCode: varchar("orderCode", { length: 48 }).notNull(),
   customerName: varchar("customerName", { length: 160 }).notNull(),
   customerPhone: varchar("customerPhone", { length: 32 }).notNull(),
@@ -351,6 +352,8 @@ export const deliveryOrders = mysqlTable("deliveryOrders", {
   destinationLatitude: decimal("destinationLatitude", { precision: 10, scale: 7 }),
   destinationLongitude: decimal("destinationLongitude", { precision: 10, scale: 7 }),
   promisedAt: timestamp("promisedAt"),
+  slaDueAt: timestamp("slaDueAt"),
+  slaAlertedAt: timestamp("slaAlertedAt"),
   status: mysqlEnum("status", ["draft", "ready", "assigned", "picked_up", "en_route", "delivered", "failed", "returned", "cancelled"]).default("draft").notNull(),
   assignedEmployeeId: int("assignedEmployeeId").references(() => employees.id, { onDelete: "set null" }),
   pickedUpAt: timestamp("pickedUpAt"),
@@ -365,6 +368,22 @@ export const deliveryOrders = mysqlTable("deliveryOrders", {
   uniqueIndex("delivery_orders_branch_code_unique").on(table.branchId, table.orderCode),
   index("delivery_orders_branch_status_idx").on(table.branchId, table.status),
   index("delivery_orders_employee_status_idx").on(table.assignedEmployeeId, table.status),
+  index("delivery_orders_sla_due_idx").on(table.branchId, table.slaDueAt),
+]);
+
+export const deliveryZones = mysqlTable("deliveryZones", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 160 }).notNull(),
+  code: varchar("code", { length: 32 }),
+  description: text("description"),
+  slaMinutes: int("slaMinutes").default(60).notNull(),
+  isActive: mysqlEnum("isActive", ["yes", "no"]).default("yes").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  uniqueIndex("delivery_zone_branch_name_unique").on(table.branchId, table.name),
+  index("delivery_zone_branch_active_idx").on(table.branchId, table.isActive),
 ]);
 
 export const deliveryEvents = mysqlTable("deliveryEvents", {
@@ -388,6 +407,16 @@ export const deliveryLocationPings = mysqlTable("deliveryLocationPings", {
   accuracyMeters: int("accuracyMeters"),
   capturedAt: timestamp("capturedAt").defaultNow().notNull(),
 }, table => [index("delivery_pings_order_time_idx").on(table.deliveryOrderId, table.capturedAt)]);
+
+export const deliveryProofImages = mysqlTable("deliveryProofImages", {
+  id: int("id").autoincrement().primaryKey(),
+  deliveryOrderId: int("deliveryOrderId").notNull().references(() => deliveryOrders.id, { onDelete: "cascade" }),
+  storageKey: varchar("storageKey", { length: 512 }).notNull(),
+  mimeType: varchar("mimeType", { length: 96 }).notNull(),
+  caption: varchar("caption", { length: 500 }),
+  uploadedByEmployeeId: int("uploadedByEmployeeId").references(() => employees.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [index("delivery_proof_order_time_idx").on(table.deliveryOrderId, table.createdAt)]);
 
 export const chatConversations = mysqlTable("chatConversations", {
   id: int("id").autoincrement().primaryKey(),
