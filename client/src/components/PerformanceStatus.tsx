@@ -10,7 +10,11 @@ function formatMetric(value: number | null) {
 export function PerformanceStatus() {
   const [metrics, setMetrics] = useState<PerformanceSnapshot>(() => getPerformanceSnapshot());
   useEffect(() => subscribePerformance(setMetrics), []);
-  const hasIssue = metrics.apiFailures > 0 || (metrics.averageApiMs ?? 0) > 1_000;
+  const slowServer = (metrics.ttfbMs ?? 0) > 3_000;
+  const slowContent = (metrics.lcpMs ?? 0) > 4_000;
+  const slowApi = (metrics.averageApiMs ?? 0) > 1_000;
+  const hasIssue = metrics.apiFailures > 0 || slowServer || slowContent || slowApi;
+  const issueText = metrics.apiFailures > 0 ? "حدث فشل في بعض طلبات التطبيق خلال هذه الجلسة." : slowServer ? "الاستجابة الأولى للخادم تجاوزت الحد التشغيلي لهذه الجلسة." : slowContent ? "عرض المحتوى الرئيسي تأخر عن الحد التشغيلي لهذه الجلسة." : slowApi ? "متوسط طلبات التطبيق تجاوز الحد التشغيلي لهذه الجلسة." : null;
 
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
@@ -29,6 +33,7 @@ export function PerformanceStatus() {
         <Metric label="طلبات API" value={String(metrics.apiRequests)} />
         <Metric label="فشل الطلبات" value={String(metrics.apiFailures)} alert={metrics.apiFailures > 0} />
       </div>
+      {issueText ? <p role="status" className="mx-2 mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-900">{issueText}</p> : null}
       <p className="px-2 pb-1 text-[10px] leading-4 text-slate-400">تُعرض القياسات محلياً لهذه الجلسة فقط ولا تُرسل بيانات عمل أو موقع.</p>
     </DropdownMenuContent>
   </DropdownMenu>;

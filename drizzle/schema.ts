@@ -129,6 +129,7 @@ export const attendanceRecords = mysqlTable("attendanceRecords", {
   id: int("id").autoincrement().primaryKey(),
   employeeId: int("employeeId").notNull().references(() => employees.id, { onDelete: "cascade" }),
   shiftAssignmentId: int("shiftAssignmentId").references(() => shiftAssignments.id, { onDelete: "set null" }),
+  importBatchId: int("importBatchId").references(() => attendanceImportBatches.id, { onDelete: "set null" }),
   workDate: date("workDate").notNull(),
   checkInAt: timestamp("checkInAt"),
   checkOutAt: timestamp("checkOutAt"),
@@ -139,13 +140,56 @@ export const attendanceRecords = mysqlTable("attendanceRecords", {
   checkInPhotoUrl: text("checkInPhotoUrl"),
   workedMinutes: int("workedMinutes").default(0).notNull(),
   lateMinutes: int("lateMinutes").default(0).notNull(),
+  earlyLeaveMinutes: int("earlyLeaveMinutes").default(0).notNull(),
+  overtimeMinutes: int("overtimeMinutes").default(0).notNull(),
   status: mysqlEnum("status", ["present", "late", "absent", "excused"]).default("present").notNull(),
+  source: mysqlEnum("source", ["self_service", "import", "manual"]).default("self_service").notNull(),
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [
   uniqueIndex("attendance_employee_date_unique").on(table.employeeId, table.workDate),
   index("attendance_date_idx").on(table.workDate),
+]);
+
+export const attendanceImportBatches = mysqlTable("attendanceImportBatches", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  sourceFileName: varchar("sourceFileName", { length: 255 }).notNull(),
+  sourceFormat: mysqlEnum("sourceFormat", ["xlsx", "csv"]).notNull(),
+  periodStart: date("periodStart").notNull(),
+  periodEnd: date("periodEnd").notNull(),
+  status: mysqlEnum("status", ["draft", "applied", "rejected"]).default("draft").notNull(),
+  totalRows: int("totalRows").default(0).notNull(),
+  acceptedRows: int("acceptedRows").default(0).notNull(),
+  rejectedRows: int("rejectedRows").default(0).notNull(),
+  issueSummary: json("issueSummary").$type<{ code: string; count: number }[]>().notNull(),
+  importedByUserId: int("importedByUserId").references(() => users.id, { onDelete: "set null" }),
+  appliedAt: timestamp("appliedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("attendance_import_batch_branch_period_idx").on(table.branchId, table.periodStart, table.periodEnd),
+  index("attendance_import_batch_status_idx").on(table.status, table.createdAt),
+]);
+
+export const attendanceImportRows = mysqlTable("attendanceImportRows", {
+  id: int("id").autoincrement().primaryKey(),
+  batchId: int("batchId").notNull().references(() => attendanceImportBatches.id, { onDelete: "cascade" }),
+  employeeId: int("employeeId").references(() => employees.id, { onDelete: "set null" }),
+  employeeCode: varchar("employeeCode", { length: 64 }).notNull(),
+  workDate: date("workDate"),
+  checkInAt: timestamp("checkInAt"),
+  checkOutAt: timestamp("checkOutAt"),
+  workedMinutes: int("workedMinutes").default(0).notNull(),
+  lateMinutes: int("lateMinutes").default(0).notNull(),
+  earlyLeaveMinutes: int("earlyLeaveMinutes").default(0).notNull(),
+  overtimeMinutes: int("overtimeMinutes").default(0).notNull(),
+  status: mysqlEnum("status", ["valid", "invalid", "applied", "skipped"]).notNull(),
+  issueCodes: json("issueCodes").$type<string[]>().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  index("attendance_import_rows_batch_idx").on(table.batchId, table.status),
+  index("attendance_import_rows_employee_date_idx").on(table.employeeId, table.workDate),
 ]);
 
 export const leaveBalances = mysqlTable("leaveBalances", {
@@ -274,11 +318,62 @@ export const payrollItems = mysqlTable("payrollItems", {
   lateDeduction: decimal("lateDeduction", { precision: 12, scale: 2 }).default("0.00").notNull(),
   absenceDeduction: decimal("absenceDeduction", { precision: 12, scale: 2 }).default("0.00").notNull(),
   leaveDeduction: decimal("leaveDeduction", { precision: 12, scale: 2 }).default("0.00").notNull(),
+  rewardsTotal: decimal("rewardsTotal", { precision: 12, scale: 2 }).default("0.00").notNull(),
+  penaltiesTotal: decimal("penaltiesTotal", { precision: 12, scale: 2 }).default("0.00").notNull(),
+  attendanceCompliancePercentage: decimal("attendanceCompliancePercentage", { precision: 5, scale: 2 }).default("0.00").notNull(),
   netSalary: decimal("netSalary", { precision: 12, scale: 2 }).notNull(),
   calculationSnapshot: json("calculationSnapshot").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [uniqueIndex("payroll_item_run_employee_unique").on(table.payrollRunId, table.employeeId)]);
+
+export const attendanceRules = mysqlTable("attendanceRules", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 160 }).notNull(),
+  metric: mysqlEnum("metric", ["late_minutes", "late_occurrences", "absence_days", "early_leave_minutes", "overtime_minutes"]).notNull(),
+  threshold: int("threshold").default(0).notNull(),
+  direction: mysqlEnum("direction", ["at_least", "at_most"]).default("at_least").notNull(),
+  adjustmentType: mysqlEnum("adjustmentType", ["reward", "penalty"]).notNull(),
+  amountMode: mysqlEnum("amountMode", ["fixed", "per_unit", "daily_rate_percentage"]).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  maximumAmount: decimal("maximumAmount", { precision: 12, scale: 2 }),
+  requiresApproval: mysqlEnum("requiresApproval", ["yes", "no"]).default("yes").notNull(),
+  isActive: mysqlEnum("isActive", ["yes", "no"]).default("yes").notNull(),
+  effectiveFrom: date("effectiveFrom").notNull(),
+  effectiveTo: date("effectiveTo"),
+  createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("attendance_rules_branch_active_idx").on(table.branchId, table.isActive),
+  index("attendance_rules_branch_metric_idx").on(table.branchId, table.metric),
+]);
+
+export const payrollAdjustments = mysqlTable("payrollAdjustments", {
+  id: int("id").autoincrement().primaryKey(),
+  payrollRunId: int("payrollRunId").references(() => payrollRuns.id, { onDelete: "set null" }),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  employeeId: int("employeeId").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  attendanceRuleId: int("attendanceRuleId").references(() => attendanceRules.id, { onDelete: "set null" }),
+  adjustmentType: mysqlEnum("adjustmentType", ["reward", "penalty"]).notNull(),
+  source: mysqlEnum("source", ["automatic_rule", "manual"]).notNull(),
+  status: mysqlEnum("status", ["pending", "approved", "rejected", "applied"]).default("pending").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  metricValue: int("metricValue").default(0).notNull(),
+  occurrenceDate: date("occurrenceDate"),
+  description: text("description").notNull(),
+  requestedByUserId: int("requestedByUserId").references(() => users.id, { onDelete: "set null" }),
+  reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewedAt"),
+  appliedAt: timestamp("appliedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  index("payroll_adjustments_employee_status_idx").on(table.employeeId, table.status),
+  index("payroll_adjustments_branch_period_idx").on(table.branchId, table.occurrenceDate),
+  index("payroll_adjustments_run_idx").on(table.payrollRunId),
+]);
 
 export const notifications = mysqlTable("notifications", {
   id: int("id").autoincrement().primaryKey(),
