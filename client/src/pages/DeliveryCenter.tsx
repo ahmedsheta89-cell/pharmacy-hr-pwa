@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Camera, CheckCircle2, Clock3, ImageIcon, MapPinned, TrendingUp, Upload } from "lucide-react";
+import { AlertTriangle, Camera, CheckCircle2, Clock3, ImageIcon, MapPinned, TrendingUp } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { DeliveryRouteMap } from "@/components/DeliveryRouteMap";
 import { trpc } from "@/lib/trpc";
@@ -34,14 +34,28 @@ export default function DeliveryCenter() {
   const branchId = profile.data?.employee?.branchId ?? 0;
   const managerEnabled = manager && Boolean(branchId);
   const utils = trpc.useUtils();
+  const [secondaryDataEnabled, setSecondaryDataEnabled] = useState(false);
+  const [mapRequested, setMapRequested] = useState(false);
+  const [pageVisible, setPageVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
+  useEffect(() => {
+    if (!managerEnabled) { setSecondaryDataEnabled(false); return; }
+    const timer = window.setTimeout(() => setSecondaryDataEnabled(true), 350);
+    return () => window.clearTimeout(timer);
+  }, [managerEnabled]);
+  useEffect(() => {
+    const updateVisibility = () => setPageVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", updateVisibility);
+    return () => document.removeEventListener("visibilitychange", updateVisibility);
+  }, []);
+  const pollingInterval = pageVisible ? 45_000 : false;
   const orders = trpc.delivery.list.useQuery({ branchId }, { enabled: managerEnabled });
   const mine = trpc.delivery.mine.useQuery(undefined, { enabled: !manager });
-  const summary = trpc.delivery.summary.useQuery({ branchId }, { enabled: managerEnabled, refetchInterval: 30_000 });
-  const liveRoutes = trpc.delivery.liveRoutes.useQuery({ branchId }, { enabled: managerEnabled, refetchInterval: 30_000 });
-  const zones = trpc.delivery.zones.useQuery({ branchId }, { enabled: managerEnabled });
-  const alerts = trpc.delivery.slaAlerts.useQuery({ branchId }, { enabled: managerEnabled, refetchInterval: 30_000 });
-  const weekly = trpc.delivery.weeklyReport.useQuery({ branchId }, { enabled: managerEnabled });
-  const team = trpc.employees.list.useQuery({ branchId }, { enabled: managerEnabled });
+  const summary = trpc.delivery.summary.useQuery({ branchId }, { enabled: managerEnabled, staleTime: 20_000, refetchInterval: pollingInterval });
+  const liveRoutes = trpc.delivery.liveRoutes.useQuery({ branchId }, { enabled: managerEnabled && mapRequested, staleTime: 20_000, refetchInterval: mapRequested ? pollingInterval : false });
+  const zones = trpc.delivery.zones.useQuery({ branchId }, { enabled: managerEnabled && secondaryDataEnabled, staleTime: 60_000 });
+  const alerts = trpc.delivery.slaAlerts.useQuery({ branchId }, { enabled: managerEnabled, staleTime: 20_000, refetchInterval: pollingInterval });
+  const weekly = trpc.delivery.weeklyReport.useQuery({ branchId }, { enabled: managerEnabled && secondaryDataEnabled, staleTime: 60_000 });
+  const team = trpc.employees.list.useQuery({ branchId }, { enabled: managerEnabled && secondaryDataEnabled, staleTime: 60_000 });
   const [form, setForm] = useState({ orderCode: "", customerName: "", customerPhone: "", address: "", promisedAt: "", deliveryZoneId: "" });
   const [zoneForm, setZoneForm] = useState({ name: "", code: "", description: "", slaMinutes: 60 });
   const [notes, setNotes] = useState<Record<number, string>>({});
@@ -85,7 +99,7 @@ export default function DeliveryCenter() {
     {manager ? <>
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{([{ label: "طلعات اليوم", value: summary.data?.dailyTrips, icon: <MapPinned className="h-4 w-4" /> }, { label: "تم التسليم", value: summary.data?.delivered, icon: <CheckCircle2 className="h-4 w-4" /> }, { label: "متأخر عن SLA", value: summary.data?.delayed, icon: <AlertTriangle className="h-4 w-4" /> }, { label: "رحلات نشطة", value: summary.data?.active, icon: <Clock3 className="h-4 w-4" /> }]).map(item => <article key={item.label} className="rounded-2xl border bg-white p-4 shadow-sm"><div className="flex items-center justify-between text-slate-500"><span className="text-xs font-bold">{item.label}</span>{item.icon}</div><p className="mt-2 text-2xl font-extrabold text-[#0f766e]">{item.value ?? "—"}</p></article>)}</section>
       <section className={`rounded-3xl border p-5 ${alerts.data?.length ? "border-amber-200 bg-amber-50" : "border-emerald-100 bg-emerald-50"}`}><div className="flex items-center gap-2"><AlertTriangle className={`h-5 w-5 ${alerts.data?.length ? "text-amber-700" : "text-emerald-700"}`} /><h3 className="font-extrabold">تنبيهات اتفاقية مستوى الخدمة</h3></div>{alerts.data?.length ? <div className="mt-3 grid gap-2 md:grid-cols-2">{alerts.data.map(alert => <div key={alert.order.id} className={`rounded-2xl p-3 text-sm ${alert.state === "breached" ? "bg-rose-100 text-rose-900" : "bg-amber-100 text-amber-900"}`}><b>{alert.order.orderCode} · {alert.agentName ?? "لم يُعيّن مندوب"}</b><p className="mt-1">{alert.zoneName ?? "بدون منطقة"} · {alert.minutesRemaining < 0 ? `تم التجاوز بـ ${Math.abs(alert.minutesRemaining)} دقيقة` : `متبقي ${alert.minutesRemaining} دقيقة`}</p></div>)}</div> : <p className="mt-2 text-sm text-emerald-800">لا توجد رحلة قريبة من تجاوز SLA أو متجاوزة حالياً.</p>}</section>
-      <DeliveryRouteMap routes={liveRoutes.data ?? []} />
+      <DeliveryRouteMap routes={liveRoutes.data ?? []} onActivate={() => setMapRequested(true)} />
       <section className="rounded-3xl border bg-white p-5 shadow-sm"><div className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-[#0f766e]" /><div><h3 className="font-extrabold">تقرير أداء المندوبين الأسبوعي</h3><p className="text-xs text-slate-500">من {formatDate(weekly.data?.weekStart)} إلى {formatDate(weekly.data?.weekEnd)}</p></div></div><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[700px] text-right text-sm"><thead className="border-b text-xs text-slate-500"><tr><th className="p-2">المندوب</th><th className="p-2">المسند</th><th className="p-2">المسلّم</th><th className="p-2">في الموعد</th><th className="p-2">إثبات</th><th className="p-2">متوسط الدقيقة</th><th className="p-2">الكفاءة</th></tr></thead><tbody>{(weekly.data?.couriers ?? []).map(row => <tr key={row.employeeId} className="border-b last:border-0"><td className="p-2 font-bold">{row.employeeName}</td><td className="p-2">{row.assigned}</td><td className="p-2">{row.delivered}</td><td className="p-2">{row.onTimeRate}%</td><td className="p-2">{row.proofRate}%</td><td className="p-2">{row.averageDeliveryMinutes ?? "—"}</td><td className="p-2"><Badge className="bg-[#e6f5ef] text-[#0f766e] hover:bg-[#e6f5ef]">{row.efficiencyScore}%</Badge></td></tr>)}{!weekly.data?.couriers.length ? <tr><td className="p-6 text-center text-slate-500" colSpan={7}>لا توجد طلعات مسندة في هذا الأسبوع.</td></tr> : null}</tbody></table></div></section>
       <section className="grid gap-4 lg:grid-cols-2"><form className="grid gap-3 rounded-3xl border bg-white p-5 shadow-sm" onSubmit={event => { event.preventDefault(); create.mutate({ branchId, deliveryZoneId: form.deliveryZoneId ? Number(form.deliveryZoneId) : undefined, orderCode: form.orderCode, customerName: form.customerName, customerPhone: form.customerPhone, address: form.address, promisedAt: form.promisedAt ? new Date(form.promisedAt) : undefined }); }}><h3 className="font-extrabold">طلب توصيل جديد</h3>{[["كود الطلب", "orderCode"], ["اسم العميل", "customerName"], ["هاتف العميل", "customerPhone"], ["العنوان", "address"]].map(([label, key]) => <div key={key}><Label>{label}</Label><Input required value={form[key as keyof typeof form]} onChange={event => setForm({ ...form, [key]: event.target.value })} /></div>)}<div><Label>منطقة التوصيل</Label><select className="mt-1 h-10 w-full rounded-md border bg-white px-3 text-sm" value={form.deliveryZoneId} onChange={event => setForm({ ...form, deliveryZoneId: event.target.value })}><option value="">بدون منطقة — يتطلب موعد وعد</option>{(zones.data ?? []).filter(zone => zone.isActive === "yes").map(zone => <option key={zone.id} value={zone.id}>{zone.name} · SLA {zone.slaMinutes} دقيقة</option>)}</select></div><div><Label>موعد الوعد (اختياري)</Label><Input type="datetime-local" value={form.promisedAt} onChange={event => setForm({ ...form, promisedAt: event.target.value })} /></div><Button className="bg-[#0f766e]">إنشاء وتجهيز الطلب</Button></form><form className="grid gap-3 rounded-3xl border bg-white p-5 shadow-sm" onSubmit={event => { event.preventDefault(); saveZone.mutate({ branchId, name: zoneForm.name, code: zoneForm.code || undefined, description: zoneForm.description || undefined, slaMinutes: Number(zoneForm.slaMinutes) }); }}><h3 className="font-extrabold">مناطق التوصيل</h3><Input required placeholder="اسم المنطقة" value={zoneForm.name} onChange={event => setZoneForm({ ...zoneForm, name: event.target.value })}/><Input placeholder="رمز اختياري" value={zoneForm.code} onChange={event => setZoneForm({ ...zoneForm, code: event.target.value })}/><Input type="number" min="5" max="1440" value={zoneForm.slaMinutes} onChange={event => setZoneForm({ ...zoneForm, slaMinutes: Number(event.target.value) })}/><Textarea placeholder="تعليمات المنطقة (اختياري)" value={zoneForm.description} onChange={event => setZoneForm({ ...zoneForm, description: event.target.value })}/><Button type="submit">حفظ المنطقة وSLA</Button><div className="space-y-1">{(zones.data ?? []).map(zone => <div key={zone.id} className="rounded-xl bg-slate-50 px-3 py-2 text-xs"><b>{zone.name}</b> · {zone.slaMinutes} دقيقة · {zone.isActive === "yes" ? "نشطة" : "مؤرشفة"}</div>)}</div></form></section>
     </> : null}

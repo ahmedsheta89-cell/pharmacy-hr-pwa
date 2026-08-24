@@ -76,9 +76,10 @@
 
 /// <reference types="@types/google.maps" />
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePersistFn } from "@/hooks/usePersistFn";
 import { cn } from "@/lib/utils";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 
 declare global {
   interface Window {
@@ -92,21 +93,35 @@ const FORGE_BASE_URL =
   "https://forge.butterfly-effect.dev";
 const MAPS_PROXY_URL = `${FORGE_BASE_URL}/v1/maps/proxy`;
 
+let mapsLoader: Promise<void> | null = null;
+
 function loadMapScript() {
-  return new Promise(resolve => {
+  if (window.google?.maps) return Promise.resolve();
+  if (mapsLoader) return mapsLoader;
+  mapsLoader = new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
+    const timeout = window.setTimeout(() => {
+      script.remove();
+      mapsLoader = null;
+      reject(new Error("انتهت مهلة تحميل الخريطة."));
+    }, 15_000);
     script.src = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&v=weekly&libraries=marker,places,geocoding,geometry`;
     script.async = true;
     script.crossOrigin = "anonymous";
     script.onload = () => {
-      resolve(null);
-      script.remove(); // Clean up immediately
+      window.clearTimeout(timeout);
+      script.remove();
+      resolve();
     };
     script.onerror = () => {
-      console.error("Failed to load Google Maps script");
+      window.clearTimeout(timeout);
+      script.remove();
+      mapsLoader = null;
+      reject(new Error("تعذر تحميل مورد الخريطة."));
     };
     document.head.appendChild(script);
   });
+  return mapsLoader;
 }
 
 interface MapViewProps {
@@ -114,6 +129,7 @@ interface MapViewProps {
   initialCenter?: google.maps.LatLngLiteral;
   initialZoom?: number;
   onMapReady?: (map: google.maps.Map) => void;
+  onError?: (error: Error) => void;
 }
 
 export function MapView({
@@ -121,33 +137,40 @@ export function MapView({
   initialCenter = { lat: 37.7749, lng: -122.4194 },
   initialZoom = 12,
   onMapReady,
+  onError,
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
+  const [loadError, setLoadError] = useState<Error | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
 
   const init = usePersistFn(async () => {
-    await loadMapScript();
-    if (!mapContainer.current) {
-      console.error("Map container not found");
-      return;
-    }
-    map.current = new window.google.maps.Map(mapContainer.current, {
-      zoom: initialZoom,
-      center: initialCenter,
-      mapTypeControl: true,
-      fullscreenControl: true,
-      zoomControl: true,
-      streetViewControl: true,
-      mapId: "DEMO_MAP_ID",
-    });
-    if (onMapReady) {
-      onMapReady(map.current);
+    try {
+      setLoadError(null);
+      await loadMapScript();
+      if (!mapContainer.current || !window.google?.maps) throw new Error("لم تكتمل تهيئة الخريطة.");
+      map.current = new window.google.maps.Map(mapContainer.current, {
+        zoom: initialZoom,
+        center: initialCenter,
+        mapTypeControl: true,
+        fullscreenControl: true,
+        zoomControl: true,
+        streetViewControl: true,
+        mapId: "DEMO_MAP_ID",
+      });
+      onMapReady?.(map.current);
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error("تعذر تحميل الخريطة.");
+      setLoadError(normalized);
+      onError?.(normalized);
     }
   });
 
   useEffect(() => {
     init();
-  }, [init]);
+  }, [init, retryToken]);
+
+  if (loadError) return <div className={cn("grid min-h-56 place-items-center rounded-2xl bg-slate-50 p-6 text-center", className)}><div><AlertTriangle className="mx-auto h-6 w-6 text-amber-600" /><p className="mt-3 text-sm font-bold text-[#17344a]">تعذر تحميل الخريطة الآن</p><p className="mt-1 text-xs text-slate-500">لن يؤثر ذلك في الطلبات أو تنبيهات SLA.</p><button type="button" onClick={() => setRetryToken(value => value + 1)} className="mt-4 inline-flex items-center gap-1 rounded-xl border border-[#cde1d7] bg-white px-3 py-2 text-xs font-bold text-[#0f766e]"><RefreshCw className="h-3.5 w-3.5" />إعادة المحاولة</button></div></div>;
 
   return (
     <div ref={mapContainer} className={cn("w-full h-[500px]", className)} />
