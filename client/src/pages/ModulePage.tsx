@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { EmployeeForm, type EditableEmployee, type EmployeeFormValues } from "@/components/EmployeeForm";
 import { PayrollEnhancements } from "@/components/PayrollEnhancements";
+import { AttendanceDashboard } from "@/components/AttendanceInsights";
 import { BranchForm } from "@/components/BranchForm";
 import { ArchiveEmployeeDialog } from "@/components/ArchiveEmployeeDialog";
 import { trpc } from "@/lib/trpc";
@@ -340,7 +341,7 @@ export default function ModulePage({ module }: { module: Module }) {
   const resolvedBranchId = useMemo(() => activeBranchId || profile.data?.employee?.branchId || branches.data?.[0]?.id || 0, [activeBranchId, profile.data?.employee?.branchId, branches.data]);
   useEffect(() => { if (!activeBranchId && resolvedBranchId) setActiveBranchId(resolvedBranchId); }, [activeBranchId, resolvedBranchId]);
   if (module === "employees") return <EmployeesModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} />;
-  if (module === "attendance") return <AttendanceModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} />;
+  if (module === "attendance") return <><AttendanceModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} /><AttendanceDashboard activeBranchId={resolvedBranchId} /></>;
   if (module === "shifts") return <ShiftsModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} />;
   if (module === "leaves") return <LeavesModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} />;
   if (module === "kpis") return <KpisModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} />;
