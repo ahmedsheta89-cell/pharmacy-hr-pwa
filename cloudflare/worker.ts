@@ -24,6 +24,11 @@ export default {
           status: "ok",
           service: "pharmacy-people-staging-api",
           environment: env.ENVIRONMENT ?? "staging",
+          migration: {
+            rlsFoundation: "validated",
+            dataEndpoints: "disabled",
+            productionData: "not_migrated",
+          },
           timestamp: new Date().toISOString(),
         },
         { headers: jsonHeaders },

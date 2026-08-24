@@ -139,3 +139,35 @@ export function mapEmployeeAuditToExcelRows(employeeName: string, employeeCode: 
     return changes.length ? changes.map(change => [...base, change.label || "حقل", change.before || "—", change.after || "—"]) : [[...base, "—", "—", "—"]];
   });
 }
+
+type AttendanceReportExportItem = {
+  employeeCode: string;
+  fullName: string;
+  expectedDays: number;
+  summary: {
+    presentDays: number;
+    absentDays: number;
+    totalLateMinutes: number;
+    earlyLeaveMinutes: number;
+    overtimeMinutes: number;
+    attendanceRate: number;
+    punctualityRate: number;
+    hoursRate: number;
+    complianceScore: number;
+  };
+};
+
+export function mapAttendanceReportToExcelRows(items: AttendanceReportExportItem[]) {
+  return items.map(item => [item.fullName, item.employeeCode, item.expectedDays, item.summary.presentDays, item.summary.absentDays, item.summary.totalLateMinutes, item.summary.earlyLeaveMinutes, item.summary.overtimeMinutes, `${item.summary.attendanceRate.toFixed(1)}%`, `${item.summary.punctualityRate.toFixed(1)}%`, `${item.summary.hoursRate.toFixed(1)}%`, `${item.summary.complianceScore.toFixed(1)}%`]);
+}
+
+type PayrollAdjustmentExportItem = {
+  employeeName: string;
+  employeeCode: string;
+  ruleName?: string | null;
+  adjustment: { adjustmentType: "reward" | "penalty"; source: "automatic_rule" | "manual"; status: "pending" | "approved" | "rejected" | "applied"; amount: string | number; metricValue: number; occurrenceDate?: Date | null; description: string; createdAt: Date };
+};
+
+export function mapPayrollAdjustmentsToExcelRows(items: PayrollAdjustmentExportItem[]) {
+  return items.map(item => [item.employeeName, item.employeeCode, item.adjustment.adjustmentType === "reward" ? "مكافأة" : "جزاء / خصم", item.adjustment.source === "automatic_rule" ? "قاعدة تلقائية" : "إدخال يدوي", item.ruleName || "—", item.adjustment.metricValue, item.adjustment.amount, { pending: "بانتظار الاعتماد", approved: "معتمد", rejected: "مرفوض", applied: "مُدرج في مسير" }[item.adjustment.status], item.adjustment.occurrenceDate ?? "—", item.adjustment.description, item.adjustment.createdAt]);
+}
