@@ -159,7 +159,7 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const config = roleDashboardConfigs[normalizeDashboardRole(user?.role)];
   const FocusIcon = config.focusIcon;
-  const overviewQuery = trpc.dashboard.overview.useQuery(undefined, { retry: false });
+  const overviewQuery = trpc.dashboard.overview.useQuery(undefined, { retry: false, staleTime: 30_000, refetchOnWindowFocus: false });
   const dashboardStats = overviewQuery.data?.stats;
 
   useEffect(() => {

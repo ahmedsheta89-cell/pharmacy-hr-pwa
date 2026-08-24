@@ -8,9 +8,11 @@ import App from "./App";
 import PwaUpdatePrompt from "./components/PwaUpdatePrompt";
 import { startLogin } from "./const";
 import { fetchWithTimeout } from "./lib/fetchWithTimeout";
+import { recordApiRequest, startPerformanceMonitor } from "./lib/performanceMonitor";
 import "./index.css";
 
 const queryClient = new QueryClient();
+startPerformanceMonitor();
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
@@ -64,11 +66,19 @@ const trpcClient = trpc.createClient({
         }
         return {};
       },
-      fetch(input, init) {
-        return fetchWithTimeout(globalThis.fetch, input, {
-          ...(init ?? {}),
-          credentials: "include",
-        });
+      async fetch(input, init) {
+        const startedAt = performance.now();
+        try {
+          const response = await fetchWithTimeout(globalThis.fetch, input, {
+            ...(init ?? {}),
+            credentials: "include",
+          });
+          recordApiRequest(performance.now() - startedAt, response.ok);
+          return response;
+        } catch (error) {
+          recordApiRequest(performance.now() - startedAt, false);
+          throw error;
+        }
       },
     }),
   ],

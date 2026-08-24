@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
+import { PerformanceStatus } from "./PerformanceStatus";
 
 type AppRole = "owner" | "manager" | "hr_manager" | "pharmacist" | "employee";
 
@@ -234,6 +235,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   {(notificationsQuery.data ?? []).length ? notificationsQuery.data?.map(notification => <DropdownMenuItem key={notification.id} onClick={() => { if (!notification.readAt) markNotificationRead.mutate({ notificationId: notification.id }); }} className={`block cursor-pointer rounded-xl px-3 py-3 whitespace-normal focus:bg-[#eaf4ef] ${notification.readAt ? "opacity-60" : "bg-[#f7fcf9]"}`}><p className="font-bold text-[#17344a]">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-500">{notification.body}</p></DropdownMenuItem>) : <p className="px-3 py-5 text-center text-xs text-slate-500">لا توجد إشعارات جديدة.</p>}
                 </DropdownMenuContent>
               </DropdownMenu>
+              <PerformanceStatus />
               <div className="flex h-9 items-center gap-2 rounded-full border border-[#dbe9e2] bg-white px-3 text-xs font-semibold text-slate-500"><ShieldCheck className="h-4 w-4 text-[#0f766e]" />بيانات محمية</div>
               <div className="h-9 rounded-full bg-[#e6f5ef] px-3.5 flex items-center text-xs font-bold text-[#0f766e]">اليوم</div>
             </div>
