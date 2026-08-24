@@ -20,6 +20,9 @@ vi.mock("../lib/trpc", () => ({
       mineToday: { useQuery: testState.attendanceQuery },
       checkIn: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
       checkOut: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
+      branchReport: { useQuery: () => ({ data: [], refetch: vi.fn(), isLoading: false }) },
+      importHistory: { useQuery: () => ({ data: [], refetch: vi.fn() }) },
+      importRecords: { useMutation: () => ({ mutate: vi.fn(), isPending: false }) },
     },
   },
 }));

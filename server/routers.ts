@@ -4,8 +4,11 @@ import { z } from "zod";
 import {
   accountLinkLogs,
   accountLinkRequests,
+  attendanceImportBatches,
+  attendanceImportRows,
   attendanceRecords,
   attendancePolicies,
+  attendanceRules,
   branches,
   chatConversations,
   chatMessages,
@@ -25,6 +28,7 @@ import {
   leaveRequests,
   notifications,
   payrollApprovals,
+  payrollAdjustments,
   payrollItems,
   payrollRuns,
   quickReplies,
@@ -34,7 +38,7 @@ import {
   users,
 } from "../drizzle/schema";
 import { nanoid } from "nanoid";
-import { calculateKpiScore, calculatePayroll } from "../shared/hr-calculations";
+import { calculateAttendanceCompliance, calculateKpiScore, calculatePayroll, calculateRuleAdjustment } from "../shared/hr-calculations";
 import { getDb, getEmployeeByUserId } from "./db";
 import { storageGet, storagePut } from "./storage";
 import { COOKIE_NAME } from "@shared/const";
@@ -46,6 +50,7 @@ const staffRoles = ["manager", "hr_manager", "pharmacist", "employee"] as const;
 const ownerRoles = ["admin", "owner"] as const;
 const managerRoles = ["admin", "owner", "manager"] as const;
 const payrollRoles = ["admin", "owner", "manager", "hr_manager"] as const;
+const financialApproverRoles = ["admin", "owner", "hr_manager"] as const;
 const employeeStatusValues = ["active", "inactive", "on_leave"] as const;
 const accountLinkRequestStatusValues = ["pending", "approved", "rejected", "cancelled"] as const;
 const deliveryStatusValues = ["draft", "ready", "assigned", "picked_up", "en_route", "delivered", "failed", "returned", "cancelled"] as const;
@@ -83,6 +88,11 @@ const managerProcedure = protectedProcedure.use(({ ctx, next }) => {
 
 const payrollProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (!hasRole(ctx.user.role, payrollRoles)) throw new TRPCError({ code: "FORBIDDEN", message: "ليس لديك صلاحية الوصول إلى مسيرات الرواتب." });
+  return next({ ctx });
+});
+
+const financialApproverProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!hasRole(ctx.user.role, financialApproverRoles)) throw new TRPCError({ code: "FORBIDDEN", message: "يلزم اعتماد الموارد البشرية أو مالك النظام لهذه العملية المالية." });
   return next({ ctx });
 });
 
@@ -125,6 +135,28 @@ function lateMinutesFromSchedule(checkInAt: Date, workDate: Date, startTime: str
   const scheduled = startOfDay(workDate);
   scheduled.setHours(hours, minutes + graceMinutes, 0, 0);
   return Math.max(0, Math.floor((checkInAt.getTime() - scheduled.getTime()) / 60000));
+}
+
+function timeOnWorkDate(workDate: Date, value: string, nextDay = false) {
+  const [hours = 0, minutes = 0] = String(value).split(":").map(Number);
+  const result = startOfDay(workDate);
+  result.setHours(hours, minutes, 0, 0);
+  if (nextDay) result.setDate(result.getDate() + 1);
+  return result;
+}
+
+function scheduledMinutesForShift(workDate: Date, shift: { startTime: string | Date; endTime: string | Date; breakMinutes: number }) {
+  const start = timeOnWorkDate(workDate, String(shift.startTime));
+  const end = timeOnWorkDate(workDate, String(shift.endTime), String(shift.endTime) <= String(shift.startTime));
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000) - Math.max(shift.breakMinutes, 0));
+}
+
+function attendanceRuleMetricValue(metric: "late_minutes" | "late_occurrences" | "absence_days" | "early_leave_minutes" | "overtime_minutes", summary: { totalLateMinutes: number; absentDays: number; earlyLeaveMinutes: number; overtimeMinutes: number }, lateOccurrences: number) {
+  if (metric === "late_minutes") return summary.totalLateMinutes;
+  if (metric === "late_occurrences") return lateOccurrences;
+  if (metric === "absence_days") return summary.absentDays;
+  if (metric === "early_leave_minutes") return summary.earlyLeaveMinutes;
+  return summary.overtimeMinutes;
 }
 
 export const appRouter = router({
@@ -605,6 +637,88 @@ export const appRouter = router({
       const db = await requireDb();
       return db.select({ employee: employees, attendance: attendanceRecords }).from(employees).leftJoin(attendanceRecords, and(eq(employees.id, attendanceRecords.employeeId), eq(attendanceRecords.workDate, startOfDay()))).where(eq(employees.branchId, input.branchId)).orderBy(asc(employees.fullName));
     }),
+    importRecords: managerProcedure.input(z.object({
+      branchId: z.number().int().positive(),
+      sourceFileName: z.string().trim().min(1).max(255),
+      sourceFormat: z.enum(["xlsx", "csv"]),
+      replaceExisting: z.boolean().default(false),
+      confirmApply: z.literal(true),
+      rows: z.array(z.object({
+        employeeCode: z.string().trim().min(1).max(64),
+        workDate: z.coerce.date(),
+        checkInAt: z.coerce.date().optional(),
+        checkOutAt: z.coerce.date().optional(),
+        status: z.enum(["present", "absent", "excused"]).optional(),
+      })).min(1).max(2000),
+    })).mutation(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      const dates = input.rows.map(row => startOfDay(row.workDate));
+      const periodStart = new Date(Math.min(...dates.map(value => value.getTime())));
+      const periodEnd = new Date(Math.max(...dates.map(value => value.getTime())));
+      const branchEmployees = await db.select().from(employees).where(and(eq(employees.branchId, input.branchId), eq(employees.employmentStatus, "active")));
+      const employeeByCode = new Map(branchEmployees.map(employee => [employee.employeeCode.trim().toUpperCase(), employee]));
+      const existingRows = await db.select({ record: attendanceRecords, employee: employees }).from(attendanceRecords).innerJoin(employees, eq(attendanceRecords.employeeId, employees.id)).where(and(eq(employees.branchId, input.branchId), gte(attendanceRecords.workDate, periodStart), lte(attendanceRecords.workDate, periodEnd)));
+      const existingByEmployeeDate = new Map(existingRows.map(row => [`${row.record.employeeId}:${row.record.workDate.toISOString().slice(0, 10)}`, row.record]));
+      const assignments = await db.select({ assignment: shiftAssignments, shift: shifts }).from(shiftAssignments).innerJoin(shifts, eq(shiftAssignments.shiftId, shifts.id)).where(and(gte(shiftAssignments.workDate, periodStart), lte(shiftAssignments.workDate, periodEnd)));
+      const assignmentByEmployeeDate = new Map(assignments.map(row => [`${row.assignment.employeeId}:${row.assignment.workDate.toISOString().slice(0, 10)}`, row]));
+      const seen = new Set<string>();
+      const prepared = input.rows.map(row => {
+        const employeeCode = row.employeeCode.trim().toUpperCase();
+        const workDate = startOfDay(row.workDate);
+        const key = `${employeeCode}:${workDate.toISOString().slice(0, 10)}`;
+        const issues: string[] = [];
+        if (seen.has(key)) issues.push("duplicate_row");
+        seen.add(key);
+        const employee = employeeByCode.get(employeeCode);
+        if (!employee) issues.push("employee_not_found");
+        if (row.checkInAt && row.checkOutAt && row.checkOutAt <= row.checkInAt) issues.push("invalid_time_order");
+        const requestedStatus = row.status ?? "present";
+        if ((requestedStatus === "present" && (!row.checkInAt || !row.checkOutAt)) || ((requestedStatus === "absent" || requestedStatus === "excused") && (row.checkInAt || row.checkOutAt))) issues.push("incomplete_attendance_row");
+        const existing = employee ? existingByEmployeeDate.get(`${employee.id}:${workDate.toISOString().slice(0, 10)}`) : undefined;
+        if (existing && !input.replaceExisting) issues.push("existing_attendance_record");
+        const assignment = employee ? assignmentByEmployeeDate.get(`${employee.id}:${workDate.toISOString().slice(0, 10)}`) : undefined;
+        const scheduledMinutes = assignment ? scheduledMinutesForShift(workDate, { startTime: String(assignment.shift.startTime), endTime: String(assignment.shift.endTime), breakMinutes: assignment.shift.breakMinutes }) : 0;
+        const workedMinutes = row.checkInAt && row.checkOutAt ? Math.max(0, Math.floor((row.checkOutAt.getTime() - row.checkInAt.getTime()) / 60_000) - (assignment?.shift.breakMinutes ?? 0)) : 0;
+        const lateMinutes = row.checkInAt && assignment ? lateMinutesFromSchedule(row.checkInAt, workDate, String(assignment.shift.startTime), assignment.shift.graceMinutes) : 0;
+        const scheduledEnd = assignment ? timeOnWorkDate(workDate, String(assignment.shift.endTime), String(assignment.shift.endTime) <= String(assignment.shift.startTime)) : null;
+        const earlyLeaveMinutes = row.checkOutAt && scheduledEnd ? Math.max(0, Math.floor((scheduledEnd.getTime() - row.checkOutAt.getTime()) / 60_000)) : 0;
+        const overtimeMinutes = scheduledMinutes ? Math.max(0, workedMinutes - scheduledMinutes) : 0;
+        const status = requestedStatus === "present" ? (lateMinutes > 0 ? "late" as const : "present" as const) : requestedStatus;
+        return { employeeCode, employee, workDate, checkInAt: row.checkInAt ?? null, checkOutAt: row.checkOutAt ?? null, workedMinutes, lateMinutes, earlyLeaveMinutes, overtimeMinutes, status, issues, existing, assignment };
+      });
+      const issueCounts = new Map<string, number>();
+      prepared.forEach(row => row.issues.forEach(issue => issueCounts.set(issue, (issueCounts.get(issue) ?? 0) + 1)));
+      const accepted = prepared.filter(row => row.issues.length === 0);
+      const batchResult = await db.insert(attendanceImportBatches).values({ branchId: input.branchId, sourceFileName: input.sourceFileName, sourceFormat: input.sourceFormat, periodStart, periodEnd, status: accepted.length ? "applied" : "rejected", totalRows: prepared.length, acceptedRows: accepted.length, rejectedRows: prepared.length - accepted.length, issueSummary: Array.from(issueCounts, ([code, count]) => ({ code, count })), importedByUserId: ctx.user.id, appliedAt: accepted.length ? new Date() : null });
+      const batchId = Number(batchResult[0].insertId);
+      await db.insert(attendanceImportRows).values(prepared.map(row => ({ batchId, employeeId: row.employee?.id ?? null, employeeCode: row.employeeCode, workDate: row.workDate, checkInAt: row.checkInAt, checkOutAt: row.checkOutAt, workedMinutes: row.workedMinutes, lateMinutes: row.lateMinutes, earlyLeaveMinutes: row.earlyLeaveMinutes, overtimeMinutes: row.overtimeMinutes, status: (row.issues.length ? (row.issues.includes("existing_attendance_record") ? "skipped" : "invalid") : "applied") as "applied" | "skipped" | "invalid", issueCodes: row.issues })));
+      for (const row of accepted) {
+        const values = { employeeId: row.employee!.id, shiftAssignmentId: row.assignment?.assignment.id ?? null, importBatchId: batchId, workDate: row.workDate, checkInAt: row.checkInAt, checkOutAt: row.checkOutAt, workedMinutes: row.workedMinutes, lateMinutes: row.lateMinutes, earlyLeaveMinutes: row.earlyLeaveMinutes, overtimeMinutes: row.overtimeMinutes, status: row.status, source: "import" as const, notes: `مستورد من ${input.sourceFileName}` };
+        if (row.existing) await db.update(attendanceRecords).set(values).where(eq(attendanceRecords.id, row.existing.id));
+        else await db.insert(attendanceRecords).values(values);
+      }
+      return { success: true, batchId, applied: accepted.length, skipped: prepared.length - accepted.length, issueSummary: Array.from(issueCounts, ([code, count]) => ({ code, count })) };
+    }),
+    importHistory: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      return db.select().from(attendanceImportBatches).where(eq(attendanceImportBatches.branchId, input.branchId)).orderBy(desc(attendanceImportBatches.createdAt)).limit(30);
+    }),
+    branchReport: managerProcedure.input(z.object({ branchId: z.number().int().positive(), from: z.coerce.date(), to: z.coerce.date() }).refine(input => input.to >= input.from, { message: "نطاق التاريخ غير صالح." })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      const from = startOfDay(input.from); const to = endOfDay(input.to); const today = startOfDay();
+      const rows = await db.select({ employee: employees, assignment: shiftAssignments, shift: shifts, attendance: attendanceRecords }).from(shiftAssignments).innerJoin(employees, eq(shiftAssignments.employeeId, employees.id)).innerJoin(shifts, eq(shiftAssignments.shiftId, shifts.id)).leftJoin(attendanceRecords, and(eq(attendanceRecords.employeeId, employees.id), eq(attendanceRecords.workDate, shiftAssignments.workDate))).where(and(eq(employees.branchId, input.branchId), gte(shiftAssignments.workDate, from), lte(shiftAssignments.workDate, to))).orderBy(asc(employees.fullName), asc(shiftAssignments.workDate));
+      const summaries = new Map<number, { employeeId: number; employeeCode: string; fullName: string; days: Array<{ scheduledMinutes: number; workedMinutes: number; lateMinutes: number; earlyLeaveMinutes: number; overtimeMinutes: number; status: "present" | "late" | "absent" | "excused" }>; expectedDays: number }>();
+      rows.forEach(row => {
+        const entry = summaries.get(row.employee.id) ?? { employeeId: row.employee.id, employeeCode: row.employee.employeeCode, fullName: row.employee.fullName, days: [], expectedDays: 0 };
+        const scheduledMinutes = scheduledMinutesForShift(row.assignment.workDate, { startTime: String(row.shift.startTime), endTime: String(row.shift.endTime), breakMinutes: row.shift.breakMinutes });
+        if (row.assignment.workDate <= today) { entry.expectedDays += 1; entry.days.push(row.attendance ? { scheduledMinutes, workedMinutes: row.attendance.workedMinutes, lateMinutes: row.attendance.lateMinutes, earlyLeaveMinutes: row.attendance.earlyLeaveMinutes, overtimeMinutes: row.attendance.overtimeMinutes, status: row.attendance.status } : { scheduledMinutes, workedMinutes: 0, lateMinutes: 0, earlyLeaveMinutes: 0, overtimeMinutes: 0, status: "absent" }); }
+        summaries.set(row.employee.id, entry);
+      });
+      return Array.from(summaries.values()).map(entry => ({ ...entry, summary: calculateAttendanceCompliance(entry.days) })).sort((a, b) => a.fullName.localeCompare(b.fullName, "ar"));
+    }),
   }),
 
   leaves: router({
@@ -803,6 +917,49 @@ export const appRouter = router({
       await db.insert(salaryStructures).values({ ...input, basicSalary: String(input.basicSalary), housingAllowance: String(input.housingAllowance), transportationAllowance: String(input.transportationAllowance), otherAllowances: String(input.otherAllowances), maximumKpiBonus: String(input.maximumKpiBonus), lateDeductionPerMinute: String(input.lateDeductionPerMinute), effectiveFrom: startOfDay(input.effectiveFrom) });
       return { success: true };
     }),
+    listRules: payrollProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      return db.select().from(attendanceRules).where(eq(attendanceRules.branchId, input.branchId)).orderBy(desc(attendanceRules.isActive), asc(attendanceRules.name));
+    }),
+    saveRule: ownerProcedure.input(z.object({
+      id: z.number().int().positive().optional(), branchId: z.number().int().positive(), name: z.string().trim().min(3).max(160),
+      metric: z.enum(["late_minutes", "late_occurrences", "absence_days", "early_leave_minutes", "overtime_minutes"]), threshold: z.number().int().min(0).max(100000), direction: z.enum(["at_least", "at_most"]), adjustmentType: z.enum(["reward", "penalty"]), amountMode: z.enum(["fixed", "per_unit", "daily_rate_percentage"]), amount: z.number().positive().max(1000000), maximumAmount: z.number().min(0).max(1000000).nullable().optional(), requiresApproval: z.enum(["yes", "no"]).default("yes"), isActive: z.enum(["yes", "no"]).default("yes"), effectiveFrom: z.coerce.date(), effectiveTo: z.coerce.date().nullable().optional(),
+    }).refine(input => !input.effectiveTo || input.effectiveTo >= input.effectiveFrom, { message: "تاريخ انتهاء القاعدة يجب أن يكون بعد تاريخ بدئها." })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const values = { branchId: input.branchId, name: input.name, metric: input.metric, threshold: input.threshold, direction: input.direction, adjustmentType: input.adjustmentType, amountMode: input.amountMode, amount: String(input.amount), maximumAmount: input.maximumAmount === null || input.maximumAmount === undefined ? null : String(input.maximumAmount), requiresApproval: input.requiresApproval, isActive: input.isActive, effectiveFrom: startOfDay(input.effectiveFrom), effectiveTo: input.effectiveTo ? startOfDay(input.effectiveTo) : null, createdByUserId: ctx.user.id };
+      if (input.id) {
+        const current = (await db.select().from(attendanceRules).where(eq(attendanceRules.id, input.id)).limit(1))[0];
+        if (!current || current.branchId !== input.branchId) throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية تعديل هذه القاعدة." });
+        await db.update(attendanceRules).set(values).where(eq(attendanceRules.id, input.id));
+        return { success: true, id: input.id };
+      }
+      const created = await db.insert(attendanceRules).values(values);
+      return { success: true, id: Number(created[0].insertId) };
+    }),
+    requestAdjustment: managerProcedure.input(z.object({ employeeId: z.number().int().positive(), adjustmentType: z.enum(["reward", "penalty"]), amount: z.number().positive().max(1000000), occurrenceDate: z.coerce.date(), description: z.string().trim().min(3).max(2000) })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const employee = (await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
+      if (!employee) throw new TRPCError({ code: "NOT_FOUND", message: "الموظف غير موجود." });
+      await assertBranchScope(ctx.user, employee.branchId);
+      const result = await db.insert(payrollAdjustments).values({ branchId: employee.branchId, employeeId: employee.id, adjustmentType: input.adjustmentType, source: "manual", status: "pending", amount: String(input.amount), occurrenceDate: startOfDay(input.occurrenceDate), description: input.description, requestedByUserId: ctx.user.id });
+      return { success: true, id: Number(result[0].insertId) };
+    }),
+    adjustments: payrollProcedure.input(z.object({ branchId: z.number().int().positive(), status: z.enum(["pending", "approved", "rejected", "applied"]).optional() })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      const rows = await db.select({ adjustment: payrollAdjustments, employeeName: employees.fullName, employeeCode: employees.employeeCode, ruleName: attendanceRules.name }).from(payrollAdjustments).innerJoin(employees, eq(payrollAdjustments.employeeId, employees.id)).leftJoin(attendanceRules, eq(payrollAdjustments.attendanceRuleId, attendanceRules.id)).where(eq(payrollAdjustments.branchId, input.branchId)).orderBy(desc(payrollAdjustments.createdAt));
+      return input.status ? rows.filter(row => row.adjustment.status === input.status) : rows;
+    }),
+    reviewAdjustment: financialApproverProcedure.input(z.object({ adjustmentId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]) })).mutation(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const adjustment = (await db.select().from(payrollAdjustments).where(eq(payrollAdjustments.id, input.adjustmentId)).limit(1))[0];
+      if (!adjustment) throw new TRPCError({ code: "NOT_FOUND", message: "التعديل المالي غير موجود." });
+      await assertBranchScope(ctx.user, adjustment.branchId);
+      if (adjustment.status !== "pending") throw new TRPCError({ code: "CONFLICT", message: "تمت مراجعة هذا التعديل المالي سابقاً." });
+      await db.update(payrollAdjustments).set({ status: input.decision, reviewedByUserId: ctx.user.id, reviewedAt: new Date() }).where(eq(payrollAdjustments.id, adjustment.id));
+      return { success: true, status: input.decision };
+    }),
     generate: managerProcedure.input(z.object({ branchId: z.number().int().positive(), year: z.number().int().min(2024).max(2100), month: z.number().int().min(1).max(12), workingDaysInMonth: z.number().int().min(1).max(31) })).mutation(async ({ ctx, input }) => {
       await assertBranchScope(ctx.user, input.branchId);
       const db = await requireDb();
@@ -815,24 +972,52 @@ export const appRouter = router({
       const to = new Date(input.year, input.month, 0);
       const team = await db.select().from(employees).where(and(eq(employees.branchId, input.branchId), eq(employees.employmentStatus, "active")));
       const policy = (await db.select().from(attendancePolicies).where(eq(attendancePolicies.branchId, input.branchId)).limit(1))[0];
+      const activeRules = (await db.select().from(attendanceRules).where(and(eq(attendanceRules.branchId, input.branchId), eq(attendanceRules.isActive, "yes")))).filter(rule => rule.effectiveFrom <= to && (!rule.effectiveTo || rule.effectiveTo >= from));
+      const approvedManualAdjustments = (await db.select().from(payrollAdjustments).where(and(eq(payrollAdjustments.branchId, input.branchId), eq(payrollAdjustments.status, "approved")))).filter(adjustment => adjustment.source === "manual" && !adjustment.payrollRunId && adjustment.occurrenceDate && adjustment.occurrenceDate >= from && adjustment.occurrenceDate <= to);
       let createdItems = 0;
+      let createdAdjustments = 0;
       for (const employee of team) {
         const salary = (await db.select().from(salaryStructures).where(and(eq(salaryStructures.employeeId, employee.id), lte(salaryStructures.effectiveFrom, to))).orderBy(desc(salaryStructures.effectiveFrom)).limit(1))[0];
         if (!salary) continue;
-        const [attendance, performance] = await Promise.all([
+        const [attendance, performance, assignments] = await Promise.all([
           db.select().from(attendanceRecords).where(and(eq(attendanceRecords.employeeId, employee.id), gte(attendanceRecords.workDate, from), lte(attendanceRecords.workDate, to))),
           db.select().from(kpiRecords).where(and(eq(kpiRecords.employeeId, employee.id), gte(kpiRecords.periodStart, from), lte(kpiRecords.periodEnd, to))),
+          db.select({ assignment: shiftAssignments, shift: shifts }).from(shiftAssignments).innerJoin(shifts, eq(shiftAssignments.shiftId, shifts.id)).where(and(eq(shiftAssignments.employeeId, employee.id), gte(shiftAssignments.workDate, from), lte(shiftAssignments.workDate, to))),
         ]);
-        const absentDays = attendance.filter(record => record.status === "absent").length;
-        const rawLateMinutes = attendance.reduce((total, record) => total + record.lateMinutes, 0);
+        const attendanceByDate = new Map(attendance.map(record => [record.workDate.toISOString().slice(0, 10), record]));
+        const attendanceDays = assignments.map(({ assignment, shift }) => {
+          const record = attendanceByDate.get(assignment.workDate.toISOString().slice(0, 10));
+          return record ? { scheduledMinutes: scheduledMinutesForShift(assignment.workDate, { startTime: String(shift.startTime), endTime: String(shift.endTime), breakMinutes: shift.breakMinutes }), workedMinutes: record.workedMinutes, lateMinutes: record.lateMinutes, earlyLeaveMinutes: record.earlyLeaveMinutes, overtimeMinutes: record.overtimeMinutes, status: record.status } : { scheduledMinutes: scheduledMinutesForShift(assignment.workDate, { startTime: String(shift.startTime), endTime: String(shift.endTime), breakMinutes: shift.breakMinutes }), workedMinutes: 0, lateMinutes: 0, earlyLeaveMinutes: 0, overtimeMinutes: 0, status: "absent" as const };
+        });
+        const attendanceSummary = calculateAttendanceCompliance(attendanceDays);
+        const absentDays = attendanceSummary.absentDays;
+        const rawLateMinutes = attendanceSummary.totalLateMinutes;
         const multipliedLateMinutes = policy?.isActive === "yes" ? Math.ceil(rawLateMinutes * toNumber(policy.lateMultiplier)) : rawLateMinutes;
         const lateMinutes = policy?.monthlyLateMinuteCap ? Math.min(multipliedLateMinutes, policy.monthlyLateMinuteCap) : multipliedLateMinutes;
         const kpiScore = performance.length === 0 ? 0 : performance.reduce((total, record) => total + toNumber(record.score), 0) / performance.length;
-        const calculation = calculatePayroll({ basicSalary: toNumber(salary.basicSalary), allowances: toNumber(salary.housingAllowance) + toNumber(salary.transportationAllowance) + toNumber(salary.otherAllowances), workingDaysInMonth: input.workingDaysInMonth, absentDays, lateMinutes, lateDeductionPerMinute: toNumber(salary.lateDeductionPerMinute), leaveDeduction: 0, kpiScore, maximumKpiBonus: toNumber(salary.maximumKpiBonus) });
-        await db.insert(payrollItems).values({ payrollRunId: run.id, employeeId: employee.id, basicSalary: String(salary.basicSalary), totalAllowances: String(toNumber(salary.housingAllowance) + toNumber(salary.transportationAllowance) + toNumber(salary.otherAllowances)), kpiScore: String(kpiScore), kpiBonus: String(calculation.kpiBonus), lateDeduction: String(calculation.lateDeduction), absenceDeduction: String(calculation.absenceDeduction), leaveDeduction: "0", netSalary: String(calculation.netSalary), calculationSnapshot: { period: { year: input.year, month: input.month }, absentDays, rawLateMinutes, lateMinutes, latePolicy: policy ? { graceMinutes: policy.graceMinutes, lateMultiplier: toNumber(policy.lateMultiplier), monthlyLateMinuteCap: policy.monthlyLateMinuteCap } : null, kpiScore, ...calculation } });
+        const dailyRate = toNumber(salary.basicSalary) / input.workingDaysInMonth;
+        const appliedAdjustmentIds: number[] = [];
+        let rewardsTotal = 0;
+        let penaltiesTotal = 0;
+        approvedManualAdjustments.filter(adjustment => adjustment.employeeId === employee.id).forEach(adjustment => {
+          appliedAdjustmentIds.push(adjustment.id);
+          if (adjustment.adjustmentType === "reward") rewardsTotal += toNumber(adjustment.amount); else penaltiesTotal += toNumber(adjustment.amount);
+        });
+        for (const rule of activeRules) {
+          const metricValue = attendanceRuleMetricValue(rule.metric, attendanceSummary, attendanceDays.filter(day => day.status === "late").length);
+          const adjustment = calculateRuleAdjustment({ metricValue, threshold: rule.threshold, direction: rule.direction, amountMode: rule.amountMode, amount: toNumber(rule.amount), dailyRate, maximumAmount: rule.maximumAmount === null ? null : toNumber(rule.maximumAmount) });
+          if (!adjustment.amount) continue;
+          const adjustmentStatus = rule.requiresApproval === "yes" ? "pending" as const : "approved" as const;
+          const created = await db.insert(payrollAdjustments).values({ payrollRunId: run.id, branchId: input.branchId, employeeId: employee.id, attendanceRuleId: rule.id, adjustmentType: rule.adjustmentType, source: "automatic_rule", status: adjustmentStatus, amount: String(adjustment.amount), metricValue, occurrenceDate: to, description: `قاعدة ${rule.name}: قيمة المؤشر ${metricValue}`, requestedByUserId: ctx.user.id, reviewedByUserId: rule.requiresApproval === "yes" ? null : ctx.user.id, reviewedAt: rule.requiresApproval === "yes" ? null : new Date() });
+          createdAdjustments += 1;
+          if (adjustmentStatus === "approved") { appliedAdjustmentIds.push(Number(created[0].insertId)); if (rule.adjustmentType === "reward") rewardsTotal += adjustment.amount; else penaltiesTotal += adjustment.amount; }
+        }
+        const calculation = calculatePayroll({ basicSalary: toNumber(salary.basicSalary), allowances: toNumber(salary.housingAllowance) + toNumber(salary.transportationAllowance) + toNumber(salary.otherAllowances), workingDaysInMonth: input.workingDaysInMonth, absentDays, lateMinutes, lateDeductionPerMinute: toNumber(salary.lateDeductionPerMinute), leaveDeduction: 0, kpiScore, maximumKpiBonus: toNumber(salary.maximumKpiBonus), rewardsTotal, penaltiesTotal });
+        await db.insert(payrollItems).values({ payrollRunId: run.id, employeeId: employee.id, basicSalary: String(salary.basicSalary), totalAllowances: String(toNumber(salary.housingAllowance) + toNumber(salary.transportationAllowance) + toNumber(salary.otherAllowances)), kpiScore: String(kpiScore), kpiBonus: String(calculation.kpiBonus), lateDeduction: String(calculation.lateDeduction), absenceDeduction: String(calculation.absenceDeduction), leaveDeduction: "0", rewardsTotal: String(calculation.rewardsTotal), penaltiesTotal: String(calculation.penaltiesTotal), attendanceCompliancePercentage: String(attendanceSummary.complianceScore), netSalary: String(calculation.netSalary), calculationSnapshot: { period: { year: input.year, month: input.month }, attendance: attendanceSummary, absentDays, rawLateMinutes, lateMinutes, latePolicy: policy ? { graceMinutes: policy.graceMinutes, lateMultiplier: toNumber(policy.lateMultiplier), monthlyLateMinuteCap: policy.monthlyLateMinuteCap } : null, kpiScore, appliedAdjustmentIds, ...calculation } });
+        for (const adjustmentId of appliedAdjustmentIds) await db.update(payrollAdjustments).set({ payrollRunId: run.id, status: "applied", appliedAt: new Date() }).where(eq(payrollAdjustments.id, adjustmentId));
         createdItems += 1;
       }
-      return { success: true, payrollRunId: run.id, createdItems };
+      return { success: true, payrollRunId: run.id, createdItems, createdAdjustments };
     }),
     submitForApproval: payrollProcedure.input(z.object({ payrollRunId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const db = await requireDb();
