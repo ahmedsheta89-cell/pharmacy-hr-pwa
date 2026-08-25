@@ -25,4 +25,12 @@ describe("calculatePayrollScenario", () => {
     expect(result.rows[0]).toMatchObject({ metric: "late_occurrences", metricValue: 2, amount: 30, adjustmentType: "reward" });
     expect(result.estimatedNet).toBe(1030);
   });
+
+  it("يضم المكافآت والخصومات المعتمدة في التقدير مع الاحتفاظ بمصدرها للعرض", () => {
+    const result = calculatePayrollScenario({ report, rules: [], from: new Date("2026-08-01"), to: new Date("2026-08-31"), basicSalary: 1000, allowances: 100, workingDays: 20, approvedAdjustments: [{ id: 10, adjustmentType: "reward", amount: 75, source: "manual", description: "مكافأة معتمدة" }, { id: 11, adjustmentType: "penalty", amount: 25, source: "manual", description: "خصم معتمد" }] });
+    expect(result.approvedAdjustments).toHaveLength(2);
+    expect(result.approvedRewards).toBe(75);
+    expect(result.approvedPenalties).toBe(25);
+    expect(result.estimatedNet).toBe(1150);
+  });
 });
