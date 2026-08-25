@@ -52,18 +52,23 @@ export function useAuth(options?: UseAuthOptions) {
     }
   }, [logoutMutation, utils]);
 
-  const state = useMemo(() => {
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(meQuery.data)
-    );
-    return {
+  useEffect(() => {
+    // Storage can be unavailable in hardened browsers, embedded webviews, or
+    // privacy modes. Never let this optional mirror interrupt the first render.
+    if (typeof window === "undefined") return;
+    try {
+      localStorage.setItem("manus-runtime-user-info", JSON.stringify(meQuery.data));
+    } catch {
+      // The authenticated cookie remains the source of truth when storage is blocked.
+    }
+  }, [meQuery.data]);
+
+  const state = useMemo(() => ({
       user: meQuery.data ?? null,
       loading: meQuery.isLoading || logoutMutation.isPending,
       error: meQuery.error ?? logoutMutation.error ?? null,
       isAuthenticated: Boolean(meQuery.data),
-    };
-  }, [
+    }), [
     meQuery.data,
     meQuery.error,
     meQuery.isLoading,

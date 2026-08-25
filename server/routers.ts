@@ -719,6 +719,37 @@ export const appRouter = router({
       });
       return Array.from(summaries.values()).map(entry => ({ ...entry, summary: calculateAttendanceCompliance(entry.days) })).sort((a, b) => a.fullName.localeCompare(b.fullName, "ar"));
     }),
+    branchComparison: ownerProcedure.input(z.object({ year: z.number().int().min(2024).max(2100), month: z.number().int().min(1).max(12) })).query(async ({ input }) => {
+      const db = await requireDb();
+      const currentFrom = new Date(input.year, input.month - 1, 1);
+      const currentTo = endOfDay(new Date(input.year, input.month, 0));
+      const previousFrom = new Date(input.year, input.month - 2, 1);
+      const previousTo = endOfDay(new Date(input.year, input.month - 1, 0));
+      const [activeBranches, assignments] = await Promise.all([
+        db.select({ id: branches.id, name: branches.name, code: branches.code }).from(branches).where(eq(branches.isActive, "yes")).orderBy(asc(branches.name)),
+        db.select({ employee: employees, assignment: shiftAssignments, shift: shifts, attendance: attendanceRecords }).from(shiftAssignments).innerJoin(employees, eq(shiftAssignments.employeeId, employees.id)).innerJoin(shifts, eq(shiftAssignments.shiftId, shifts.id)).leftJoin(attendanceRecords, and(eq(attendanceRecords.employeeId, employees.id), eq(attendanceRecords.workDate, shiftAssignments.workDate))).where(and(gte(shiftAssignments.workDate, previousFrom), lte(shiftAssignments.workDate, currentTo))),
+      ]);
+      const today = startOfDay();
+      type Day = { scheduledMinutes: number; workedMinutes: number; lateMinutes: number; earlyLeaveMinutes: number; overtimeMinutes: number; status: "present" | "late" | "absent" | "excused" };
+      const byBranch = new Map<number, { current: Day[]; previous: Day[] }>();
+      activeBranches.forEach(branch => byBranch.set(branch.id, { current: [], previous: [] }));
+      assignments.forEach(row => {
+        if (row.assignment.workDate > today) return;
+        const bucket = byBranch.get(row.employee.branchId);
+        if (!bucket) return;
+        const day: Day = row.attendance ? { scheduledMinutes: scheduledMinutesForShift(row.assignment.workDate, { startTime: String(row.shift.startTime), endTime: String(row.shift.endTime), breakMinutes: row.shift.breakMinutes }), workedMinutes: row.attendance.workedMinutes, lateMinutes: row.attendance.lateMinutes, earlyLeaveMinutes: row.attendance.earlyLeaveMinutes, overtimeMinutes: row.attendance.overtimeMinutes, status: row.attendance.status } : { scheduledMinutes: scheduledMinutesForShift(row.assignment.workDate, { startTime: String(row.shift.startTime), endTime: String(row.shift.endTime), breakMinutes: row.shift.breakMinutes }), workedMinutes: 0, lateMinutes: 0, earlyLeaveMinutes: 0, overtimeMinutes: 0, status: "absent" };
+        if (row.assignment.workDate >= currentFrom && row.assignment.workDate <= currentTo) bucket.current.push(day);
+        else if (row.assignment.workDate >= previousFrom && row.assignment.workDate <= previousTo) bucket.previous.push(day);
+      });
+      return activeBranches.map(branch => {
+        const bucket = byBranch.get(branch.id)!;
+        const current = calculateAttendanceCompliance(bucket.current);
+        const previous = calculateAttendanceCompliance(bucket.previous);
+        const currentAvailable = bucket.current.length > 0;
+        const previousAvailable = bucket.previous.length > 0;
+        return { branchId: branch.id, branchName: branch.name, branchCode: branch.code, month: input.month, year: input.year, expectedDays: bucket.current.length, complianceScore: currentAvailable ? current.complianceScore : null, attendanceRate: currentAvailable ? current.attendanceRate : null, punctualityRate: currentAvailable ? current.punctualityRate : null, hoursRate: currentAvailable ? current.hoursRate : null, totalLateMinutes: current.totalLateMinutes, previousComplianceScore: previousAvailable ? previous.complianceScore : null, monthlyChange: currentAvailable && previousAvailable ? current.complianceScore - previous.complianceScore : null };
+      }).sort((a, b) => (b.complianceScore ?? -1) - (a.complianceScore ?? -1) || a.branchName.localeCompare(b.branchName, "ar"));
+    }),
   }),
 
   leaves: router({
@@ -921,6 +952,18 @@ export const appRouter = router({
       await assertBranchScope(ctx.user, input.branchId);
       const db = await requireDb();
       return db.select().from(attendanceRules).where(eq(attendanceRules.branchId, input.branchId)).orderBy(desc(attendanceRules.isActive), asc(attendanceRules.name));
+    }),
+    simulationInputs: payrollProcedure.input(z.object({ employeeId: z.number().int().positive(), from: z.coerce.date(), to: z.coerce.date() }).refine(input => input.to >= input.from, { message: "نطاق التاريخ غير صالح." })).query(async ({ ctx, input }) => {
+      const db = await requireDb();
+      const employee = (await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
+      if (!employee) throw new TRPCError({ code: "NOT_FOUND", message: "الموظف غير موجود." });
+      await assertBranchScope(ctx.user, employee.branchId);
+      const to = endOfDay(input.to);
+      const [salary, approvedAdjustments] = await Promise.all([
+        db.select().from(salaryStructures).where(and(eq(salaryStructures.employeeId, employee.id), lte(salaryStructures.effectiveFrom, to))).orderBy(desc(salaryStructures.effectiveFrom)).limit(1),
+        db.select().from(payrollAdjustments).where(and(eq(payrollAdjustments.employeeId, employee.id), eq(payrollAdjustments.status, "approved"), gte(payrollAdjustments.occurrenceDate, startOfDay(input.from)), lte(payrollAdjustments.occurrenceDate, to))).orderBy(desc(payrollAdjustments.occurrenceDate)),
+      ]);
+      return { salary: salary[0] ?? null, approvedAdjustments: approvedAdjustments.filter(adjustment => !adjustment.payrollRunId) };
     }),
     saveRule: ownerProcedure.input(z.object({
       id: z.number().int().positive().optional(), branchId: z.number().int().positive(), name: z.string().trim().min(3).max(160),
