@@ -15,4 +15,10 @@ describe("بصمة فشل بدء التطبيق", () => {
     expect(diagnostic.message).not.toContain("\n");
     expect(diagnostic.message.length).toBeLessThanOrEqual(160);
   });
+
+  it("تعرض مرحلة bootstrap الآمنة بدلاً من رسالة التبعية الأصلية", () => {
+    const diagnostic = createStartupDiagnostic(new Error("BOOTSTRAP_STAGE:APP_MODULE"));
+    expect(diagnostic.code).toBe("BOOTSTRAP_STAGE");
+    expect(diagnostic.message).toBe("BOOTSTRAP_STAGE:APP_MODULE");
+  });
 });
