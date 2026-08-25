@@ -1,5 +1,4 @@
-const CACHE_NAME = "pharmacy-hr-shell-v1";
-const CACHE_NAME = "pharmacy-hr-shell-v4";
+const CACHE_NAME = "pharmacy-hr-shell-v5";
 const APP_SHELL = ["/", "/offline.html", "/manifest.webmanifest", "/icons/pharmacy-hr.svg"];
 
 self.addEventListener("install", event => {
