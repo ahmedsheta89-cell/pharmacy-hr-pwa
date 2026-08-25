@@ -2,6 +2,7 @@ const MAX_DIAGNOSTIC_MESSAGE_LENGTH = 160;
 
 export type StartupDiagnosticCode =
   | "BOOTSTRAP_MODULE_LOAD"
+  | "BOOTSTRAP_STAGE"
   | "BOOTSTRAP_SYNTAX"
   | "PERFORMANCE_API"
   | "FETCH_API"
@@ -26,7 +27,8 @@ export function createStartupDiagnostic(error: unknown): StartupDiagnostic {
   const normalized = message.toLowerCase();
 
   let code: StartupDiagnosticCode = "BOOTSTRAP_RUNTIME";
-  if (normalized.includes("dynamically imported module")) code = "BOOTSTRAP_MODULE_LOAD";
+  if (message.startsWith("BOOTSTRAP_STAGE:")) code = "BOOTSTRAP_STAGE";
+  else if (normalized.includes("dynamically imported module")) code = "BOOTSTRAP_MODULE_LOAD";
   else if (name === "SyntaxError") code = "BOOTSTRAP_SYNTAX";
   else if (normalized.includes("performance") || normalized.includes("now is not a function")) code = "PERFORMANCE_API";
   else if (normalized.includes("fetch") || normalized.includes("network")) code = "FETCH_API";
