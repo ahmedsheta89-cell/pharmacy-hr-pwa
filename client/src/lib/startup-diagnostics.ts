@@ -35,3 +35,9 @@ export function createStartupDiagnostic(error: unknown): StartupDiagnostic {
 
   return { code, name: safeMessage(name).slice(0, 64), message };
 }
+
+export function getStartupStage(diagnostic: StartupDiagnostic) {
+  if (diagnostic.code !== "BOOTSTRAP_STAGE") return undefined;
+  const stage = diagnostic.message.slice("BOOTSTRAP_STAGE:".length);
+  return /^[A-Z_]{3,64}$/.test(stage) ? stage : undefined;
+}
