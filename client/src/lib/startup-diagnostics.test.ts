@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createStartupDiagnostic } from "./startup-diagnostics";
+import { createStartupDiagnostic, getStartupStage } from "./startup-diagnostics";
 
 describe("بصمة فشل بدء التطبيق", () => {
   it("تصنف تعذر تحميل وحدة ديناميكية من دون تضمين stack trace", () => {
@@ -20,5 +20,10 @@ describe("بصمة فشل بدء التطبيق", () => {
     const diagnostic = createStartupDiagnostic(new Error("BOOTSTRAP_STAGE:APP_MODULE"));
     expect(diagnostic.code).toBe("BOOTSTRAP_STAGE");
     expect(diagnostic.message).toBe("BOOTSTRAP_STAGE:APP_MODULE");
+    expect(getStartupStage(diagnostic)).toBe("APP_MODULE");
+  });
+
+  it("ترفض أي مرحلة لا تطابق الصيغة الداخلية الموثوقة", () => {
+    expect(getStartupStage({ code: "BOOTSTRAP_STAGE", name: "Error", message: "BOOTSTRAP_STAGE:<script>" })).toBeUndefined();
   });
 });
