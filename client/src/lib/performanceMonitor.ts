@@ -63,8 +63,12 @@ export function resetPerformanceSnapshot() {
 export function startPerformanceMonitor() {
   if (typeof window === "undefined" || typeof PerformanceObserver === "undefined") return () => undefined;
 
-  const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-  if (navigation) setMetric({ ttfbMs: Math.max(0, navigation.responseStart - navigation.requestStart) });
+  try {
+    const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    if (navigation) setMetric({ ttfbMs: Math.max(0, navigation.responseStart - navigation.requestStart) });
+  } catch {
+    // Navigation timing is optional and must never block application startup.
+  }
 
   const observers: PerformanceObserver[] = [];
   const observe = (type: string, callback: (entries: PerformanceEntry[]) => void) => {

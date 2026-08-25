@@ -171,3 +171,24 @@ type PayrollAdjustmentExportItem = {
 export function mapPayrollAdjustmentsToExcelRows(items: PayrollAdjustmentExportItem[]) {
   return items.map(item => [item.employeeName, item.employeeCode, item.adjustment.adjustmentType === "reward" ? "مكافأة" : "جزاء / خصم", item.adjustment.source === "automatic_rule" ? "قاعدة تلقائية" : "إدخال يدوي", item.ruleName || "—", item.adjustment.metricValue, item.adjustment.amount, { pending: "بانتظار الاعتماد", approved: "معتمد", rejected: "مرفوض", applied: "مُدرج في مسير" }[item.adjustment.status], item.adjustment.occurrenceDate ?? "—", item.adjustment.description, item.adjustment.createdAt]);
 }
+
+export type DashboardExportStat = { label: string; value: string; hint: string };
+
+export function mapDashboardReportToExcelRows(input: { roleLabel: string; stats: DashboardExportStat[]; generatedAt?: Date }) {
+  const generatedAt = input.generatedAt ?? new Date();
+  return [
+    ["نوع التقرير", "لوحة تحكم دور"],
+    ["الدور", input.roleLabel],
+    ["وقت التصدير", generatedAt],
+    ["مصدر البيانات", "المؤشرات الحية المصرح بها في لوحة المستخدم"],
+    [],
+    ["المؤشر", "القيمة", "التفسير"],
+    ...input.stats.map(stat => [stat.label, stat.value, stat.hint]),
+  ];
+}
+
+export type BranchComparisonExportItem = { branchName: string; branchCode: string; expectedDays: number; complianceScore: number | null; attendanceRate: number | null; punctualityRate: number | null; hoursRate: number | null; totalLateMinutes: number; previousComplianceScore: number | null; monthlyChange: number | null };
+
+export function mapBranchComparisonToExcelRows(items: BranchComparisonExportItem[]) {
+  return items.map((item, index) => [index + 1, item.branchName, item.branchCode, item.expectedDays, item.complianceScore === null ? "—" : `${item.complianceScore.toFixed(1)}%`, item.attendanceRate === null ? "—" : `${item.attendanceRate.toFixed(1)}%`, item.punctualityRate === null ? "—" : `${item.punctualityRate.toFixed(1)}%`, item.hoursRate === null ? "—" : `${item.hoursRate.toFixed(1)}%`, item.totalLateMinutes, item.previousComplianceScore === null ? "—" : `${item.previousComplianceScore.toFixed(1)}%`, item.monthlyChange === null ? "—" : `${item.monthlyChange >= 0 ? "+" : ""}${item.monthlyChange.toFixed(1)} نقطة`]);
+}

@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
+import { downloadExcelWorkbook, mapDashboardReportToExcelRows } from "@/lib/excel-export";
 import { useLocation } from "wouter";
 import {
   ArrowUpLeft,
@@ -14,6 +15,7 @@ import {
   CircleAlert,
   Clock3,
   FileText,
+  FileDown,
   HandCoins,
   HeartPulse,
   Pill,
@@ -26,6 +28,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useEffect } from "react";
 import { saveOfflineDashboardSnapshot } from "@/lib/offlineSnapshot";
+import { BranchComplianceComparison } from "@/components/BranchComplianceComparison";
 
 type AppRole = "owner" | "manager" | "pharmacist" | "employee";
 type Stat = { label: string; value: string; hint: string; icon: LucideIcon; tint: string };
@@ -162,6 +165,11 @@ export default function Dashboard() {
   const overviewQuery = trpc.dashboard.overview.useQuery(undefined, { retry: false, staleTime: 30_000, refetchOnWindowFocus: false });
   const dashboardStats = overviewQuery.data?.stats;
 
+  const exportDashboardReport = () => {
+    const stats = config.stats.map((stat, index) => ({ label: stat.label, value: dashboardStats?.[index]?.value ?? stat.value, hint: dashboardStats?.[index]?.hint ?? stat.hint }));
+    downloadExcelWorkbook(`dashboard-${normalizeDashboardRole(user?.role)}-${new Date().toISOString().slice(0, 10)}`, ["الحقل", "القيمة", "التفسير"], mapDashboardReportToExcelRows({ roleLabel: config.badge, stats }), "لوحة الدور");
+  };
+
   useEffect(() => {
     if (user?.id == null || !dashboardStats?.length) return;
     saveOfflineDashboardSnapshot(user.id, dashboardStats.map((stat, index) => ({
@@ -172,12 +180,13 @@ export default function Dashboard() {
   }, [config.stats, dashboardStats, user?.id]);
 
   return <div className="space-y-6" dir="rtl">
-    <section className="relative overflow-hidden rounded-[1.75rem] bg-[#17344a] px-6 py-7 text-white shadow-[0_30px_60px_-36px_rgba(23,52,74,.72)] md:px-8 md:py-8"><div className="relative z-10 flex flex-col justify-between gap-7 lg:flex-row lg:items-end"><div className="max-w-2xl"><Badge className="border-0 bg-white/10 px-3 py-1 text-[#a7ebcf] hover:bg-white/10">{config.badge}</Badge><h2 className="mt-4 text-2xl font-extrabold tracking-tight md:text-3xl">{config.title}</h2><p className="mt-3 max-w-xl text-sm leading-7 text-slate-300">{config.description}</p></div><div className="flex flex-wrap gap-3"><Button onClick={() => setLocation(config.primaryPath)} className="h-11 rounded-xl bg-[#9ee4c9] px-5 font-bold text-[#123c35] hover:bg-[#c1efd9]"><Plus className="ml-2 h-4 w-4" />{config.primaryAction}</Button><Button variant="outline" onClick={() => setLocation(config.secondaryPath)} className="h-11 rounded-xl border-white/20 bg-white/5 px-5 font-bold text-white hover:bg-white/15 hover:text-white">{config.secondaryAction}</Button></div></div><div className="pointer-events-none absolute -ml-16 -mt-44 h-72 w-72 rounded-full bg-[#0f766e]/30 blur-3xl" /></section>
+    <section className="relative overflow-hidden rounded-[1.75rem] bg-[#17344a] px-6 py-7 text-white shadow-[0_30px_60px_-36px_rgba(23,52,74,.72)] md:px-8 md:py-8"><div className="relative z-10 flex flex-col justify-between gap-7 lg:flex-row lg:items-end"><div className="max-w-2xl"><Badge className="border-0 bg-white/10 px-3 py-1 text-[#a7ebcf] hover:bg-white/10">{config.badge}</Badge><h2 className="mt-4 text-2xl font-extrabold tracking-tight md:text-3xl">{config.title}</h2><p className="mt-3 max-w-xl text-sm leading-7 text-slate-300">{config.description}</p></div><div className="flex flex-wrap gap-3"><Button variant="outline" onClick={exportDashboardReport} disabled={overviewQuery.isLoading} className="h-11 rounded-xl border-white/20 bg-white/5 px-5 font-bold text-white hover:bg-white/15 hover:text-white"><FileDown className="ml-2 h-4 w-4" />تصدير التقرير</Button><Button onClick={() => setLocation(config.primaryPath)} className="h-11 rounded-xl bg-[#9ee4c9] px-5 font-bold text-[#123c35] hover:bg-[#c1efd9]"><Plus className="ml-2 h-4 w-4" />{config.primaryAction}</Button><Button variant="outline" onClick={() => setLocation(config.secondaryPath)} className="h-11 rounded-xl border-white/20 bg-white/5 px-5 font-bold text-white hover:bg-white/15 hover:text-white">{config.secondaryAction}</Button></div></div><div className="pointer-events-none absolute -ml-16 -mt-44 h-72 w-72 rounded-full bg-[#0f766e]/30 blur-3xl" /></section>
 
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{config.stats.map((stat, index) => { const liveStat = dashboardStats?.[index]; return <Card key={stat.label} className="border-[#e1ece6] bg-white py-0 shadow-[0_14px_36px_-30px_rgba(23,52,74,.55)]"><CardContent className="p-5"><div className="flex items-start justify-between"><div><p className="text-xs font-bold text-slate-500">{stat.label}</p><p className="mt-2 text-2xl font-extrabold tracking-tight text-[#17344a]">{overviewQuery.isLoading ? "…" : liveStat?.value ?? stat.value}</p></div><span className={`grid h-10 w-10 place-items-center rounded-xl ${stat.tint}`}><stat.icon className="h-5 w-5" /></span></div><p className="mt-4 text-xs text-slate-400">{liveStat?.hint ?? stat.hint}</p></CardContent></Card>; })}</section>
 
     <section className="grid gap-6 xl:grid-cols-[1.45fr_.85fr]"><Card className="border-[#e1ece6] bg-white shadow-[0_14px_36px_-30px_rgba(23,52,74,.55)]"><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm font-extrabold text-[#17344a]">{config.focusTitle}</p><p className="mt-1 text-xs text-slate-500">تحديثات حية مرتبطة ببياناتك المصرح بها فقط.</p></div><button onClick={() => setLocation("/kpis")} className="flex items-center gap-1 text-xs font-bold text-[#0f766e]">عرض التفاصيل<ArrowUpLeft className="h-3.5 w-3.5" /></button></div><div className="mt-7 grid min-h-56 place-items-center rounded-2xl border border-dashed border-[#cbe1d6] bg-[#f8fbf9] px-6 text-center"><div><span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[#e6f5ef] text-[#0f766e]"><FocusIcon className="h-6 w-6" /></span><p className="mt-4 text-sm font-extrabold text-[#17344a]">بيانات الأداء بانتظار التفعيل</p><p className="mt-1 max-w-md text-xs leading-5 text-slate-500">{config.focusText}</p></div></div></CardContent></Card><Card className="border-[#e1ece6] bg-white shadow-[0_14px_36px_-30px_rgba(23,52,74,.55)]"><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm font-extrabold text-[#17344a]">{config.alertsTitle}</p><p className="mt-1 text-xs text-slate-500">استثناءات تحتاج اهتمامك.</p></div><span className="grid h-9 w-9 place-items-center rounded-xl bg-[#fff3db] text-[#b87516]"><CircleAlert className="h-4 w-4" /></span></div><div className="mt-6 rounded-2xl bg-[#fbfcfb] p-5 text-center"><BellRing className="mx-auto h-6 w-6 text-slate-300" /><p className="mt-3 text-sm font-bold text-[#17344a]">لا توجد تنبيهات حالياً</p><p className="mt-1 text-xs leading-5 text-slate-500">{config.alertsText}</p></div></CardContent></Card></section>
 
     <section><div className="mb-3"><h3 className="text-base font-extrabold text-[#17344a]">{config.quickTitle}</h3><p className="mt-1 text-xs text-slate-500">{config.quickDescription}</p></div><div className="grid gap-3 md:grid-cols-3">{config.actions.map(action => <QuickActionCard key={action.title} action={action} onClick={() => setLocation(action.path)} />)}</div></section>
+    {normalizeDashboardRole(user?.role) === "owner" ? <BranchComplianceComparison /> : null}
   </div>;
 }
