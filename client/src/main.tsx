@@ -39,5 +39,5 @@ function renderStartupFallback(error: unknown) {
 }
 
 void import("./bootstrap").then(({ bootstrapApp }) => {
-  bootstrapApp();
+  return bootstrapApp();
 }).catch(renderStartupFallback);
