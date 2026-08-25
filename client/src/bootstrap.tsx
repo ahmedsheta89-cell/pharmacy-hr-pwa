@@ -12,6 +12,16 @@ import { recordApiRequest, startPerformanceMonitor } from "./lib/performanceMoni
 
 const queryClient = new QueryClient();
 
+function safeNow() {
+  try {
+    return typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now();
+  } catch {
+    return Date.now();
+  }
+}
+
+const baseFetch = typeof globalThis.fetch === "function" ? globalThis.fetch.bind(globalThis) : undefined;
+
 function redirectToLoginIfUnauthorized(error: unknown) {
   if (!(error instanceof TRPCClientError) || typeof window === "undefined") return;
   if (error.message === UNAUTHED_ERR_MSG) startLogin();
@@ -53,13 +63,14 @@ const trpcClient = trpc.createClient({
         return {};
       },
       async fetch(input, init) {
-        const startedAt = performance.now();
+        const startedAt = safeNow();
         try {
-          const response = await fetchWithTimeout(globalThis.fetch, input, { ...(init ?? {}), credentials: "include" });
-          recordApiRequest(performance.now() - startedAt, response.ok);
+          if (!baseFetch) throw new Error("FETCH_UNAVAILABLE");
+          const response = await fetchWithTimeout(baseFetch, input, { ...(init ?? {}), credentials: "include" });
+          recordApiRequest(safeNow() - startedAt, response.ok);
           return response;
         } catch (error) {
-          recordApiRequest(performance.now() - startedAt, false);
+          recordApiRequest(safeNow() - startedAt, false);
           throw error;
         }
       },

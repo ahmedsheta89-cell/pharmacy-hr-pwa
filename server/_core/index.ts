@@ -36,6 +36,14 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  app.post("/api/startup-diagnostic", (req, res) => {
+    const body = req.body as Record<string, unknown> | undefined;
+    const code = typeof body?.code === "string" && /^[A-Z_]{3,64}$/.test(body.code) ? body.code : "BOOTSTRAP_RUNTIME";
+    const name = typeof body?.name === "string" ? body.name.replace(/[\r\n\t]+/g, " ").slice(0, 64) : "UnknownError";
+    const message = typeof body?.message === "string" ? body.message.replace(/[\r\n\t]+/g, " ").slice(0, 160) : "";
+    console.error("[Client Startup Diagnostic]", JSON.stringify({ code, name, message }));
+    res.status(204).end();
+  });
   // tRPC API
   app.use(
     "/api/trpc",
