@@ -20,7 +20,8 @@ describe("إعدادات PWA وإتاحة الهاتف", () => {
 
   it("يخزن غلاف التطبيق ويستثني واجهات البيانات الحية من التخزين ويوجه للتعافي دون اتصال", () => {
     const serviceWorker = readProjectFile("client/public/sw.js");
-    expect(serviceWorker).toContain('const CACHE_NAME = "pharmacy-hr-shell-v4"');
+    expect(serviceWorker).toContain('const CACHE_NAME = "pharmacy-hr-shell-v5"');
+    expect(serviceWorker.match(/const CACHE_NAME/g)).toHaveLength(1);
     expect(serviceWorker).toContain('url.pathname.startsWith("/api/")');
     expect(serviceWorker).toContain('caches.match("/offline.html")');
     expect(serviceWorker).toContain("SKIP_WAITING");
