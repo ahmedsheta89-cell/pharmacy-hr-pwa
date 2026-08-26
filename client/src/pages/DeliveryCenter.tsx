@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
-const statusLabel: Record<string, string> = { draft: "مسودة", ready: "جاهز", assigned: "مسند", picked_up: "تم الاستلام", en_route: "في الطريق", delivered: "تم التسليم", failed: "تعذر التسليم", returned: "عاد للفرع", cancelled: "ملغي" };
+const statusLabel: Record<string, string> = { draft: "مطلوب", contacted: "تم التواصل", prepared: "قيد التجهيز", ready: "جاهز", assigned: "مسند", picked_up: "تم الاستلام", en_route: "في الطريق", delivered: "تم التسليم", failed: "تعذر التسليم", returned: "عاد للفرع", cancelled: "ملغي" };
 const terminalStatuses = ["delivered", "failed", "returned", "cancelled"];
 const canManage = (role?: string) => ["admin", "owner", "manager"].includes(role ?? "");
 

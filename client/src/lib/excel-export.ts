@@ -192,3 +192,16 @@ export type BranchComparisonExportItem = { branchName: string; branchCode: strin
 export function mapBranchComparisonToExcelRows(items: BranchComparisonExportItem[]) {
   return items.map((item, index) => [index + 1, item.branchName, item.branchCode, item.expectedDays, item.complianceScore === null ? "—" : `${item.complianceScore.toFixed(1)}%`, item.attendanceRate === null ? "—" : `${item.attendanceRate.toFixed(1)}%`, item.punctualityRate === null ? "—" : `${item.punctualityRate.toFixed(1)}%`, item.hoursRate === null ? "—" : `${item.hoursRate.toFixed(1)}%`, item.totalLateMinutes, item.previousComplianceScore === null ? "—" : `${item.previousComplianceScore.toFixed(1)}%`, item.monthlyChange === null ? "—" : `${item.monthlyChange >= 0 ? "+" : ""}${item.monthlyChange.toFixed(1)} نقطة`]);
 }
+
+export type OrderPortalExportItem = {
+  order: { orderCode: string; customerName: string; customerPhone: string; itemName?: string | null; itemCode?: string | null; quantity: number; address: string; status: string; createdAt: Date; contactedAt?: Date | null; preparedAt?: Date | null; deliveredAt?: Date | null; notes?: string | null };
+  requesterName?: string | null;
+  courierName?: string | null;
+  zoneName?: string | null;
+};
+
+const orderStatusLabels: Record<string, string> = { draft: "مطلوب", contacted: "تم التواصل", prepared: "قيد التجهيز", ready: "جاهز للتوصيل", assigned: "مسند", picked_up: "تم الاستلام", en_route: "في الطريق", delivered: "تم التوصيل", failed: "تعذر التوصيل", returned: "عاد للفرع", cancelled: "ملغي" };
+
+export function mapOrderPortalToExcelRows(items: OrderPortalExportItem[]) {
+  return items.map(item => [item.order.orderCode, item.order.customerName, item.order.customerPhone, item.order.itemName || "—", item.order.itemCode || "—", item.order.quantity, orderStatusLabels[item.order.status] || item.order.status, item.requesterName || "—", item.zoneName || "—", item.courierName || "—", item.order.address, item.order.createdAt, item.order.contactedAt ?? "—", item.order.preparedAt ?? "—", item.order.deliveredAt ?? "—", item.order.notes || "—"]);
+}
