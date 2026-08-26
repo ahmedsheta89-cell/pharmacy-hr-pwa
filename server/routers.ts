@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { z } from "zod";
 import {
   accountLinkLogs,
@@ -953,15 +953,27 @@ export const appRouter = router({
       const db = await requireDb();
       return db.select().from(attendanceRules).where(eq(attendanceRules.branchId, input.branchId)).orderBy(desc(attendanceRules.isActive), asc(attendanceRules.name));
     }),
+    simulationCatalog: payrollProcedure.input(z.object({ branchId: z.number().int().positive(), asOf: z.coerce.date() })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      const asOf = endOfDay(input.asOf);
+      const rows = await db.select({ employeeId: employees.id, fullName: employees.fullName, employeeCode: employees.employeeCode, jobTitle: employees.jobTitle, salaryStructureId: salaryStructures.id, salaryEffectiveFrom: salaryStructures.effectiveFrom }).from(employees).leftJoin(salaryStructures, and(eq(salaryStructures.employeeId, employees.id), lte(salaryStructures.effectiveFrom, asOf), or(isNull(salaryStructures.effectiveTo), gte(salaryStructures.effectiveTo, asOf)))).where(and(eq(employees.branchId, input.branchId), eq(employees.employmentStatus, "active"))).orderBy(asc(employees.fullName), desc(salaryStructures.effectiveFrom));
+      const catalog = new Map<number, { employeeId: number; fullName: string; employeeCode: string; jobTitle: string; hasActiveSalary: boolean; salaryEffectiveFrom: Date | null }>();
+      for (const row of rows) {
+        if (!catalog.has(row.employeeId)) catalog.set(row.employeeId, { employeeId: row.employeeId, fullName: row.fullName, employeeCode: row.employeeCode, jobTitle: row.jobTitle, hasActiveSalary: Boolean(row.salaryStructureId), salaryEffectiveFrom: row.salaryEffectiveFrom ?? null });
+      }
+      return Array.from(catalog.values());
+    }),
     simulationInputs: payrollProcedure.input(z.object({ employeeId: z.number().int().positive(), from: z.coerce.date(), to: z.coerce.date() }).refine(input => input.to >= input.from, { message: "نطاق التاريخ غير صالح." })).query(async ({ ctx, input }) => {
       const db = await requireDb();
       const employee = (await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1))[0];
       if (!employee) throw new TRPCError({ code: "NOT_FOUND", message: "الموظف غير موجود." });
       await assertBranchScope(ctx.user, employee.branchId);
+      const from = startOfDay(input.from);
       const to = endOfDay(input.to);
       const [salary, approvedAdjustments] = await Promise.all([
-        db.select().from(salaryStructures).where(and(eq(salaryStructures.employeeId, employee.id), lte(salaryStructures.effectiveFrom, to))).orderBy(desc(salaryStructures.effectiveFrom)).limit(1),
-        db.select().from(payrollAdjustments).where(and(eq(payrollAdjustments.employeeId, employee.id), eq(payrollAdjustments.status, "approved"), gte(payrollAdjustments.occurrenceDate, startOfDay(input.from)), lte(payrollAdjustments.occurrenceDate, to))).orderBy(desc(payrollAdjustments.occurrenceDate)),
+        db.select().from(salaryStructures).where(and(eq(salaryStructures.employeeId, employee.id), lte(salaryStructures.effectiveFrom, to), or(isNull(salaryStructures.effectiveTo), gte(salaryStructures.effectiveTo, from)))).orderBy(desc(salaryStructures.effectiveFrom)).limit(1),
+        db.select().from(payrollAdjustments).where(and(eq(payrollAdjustments.employeeId, employee.id), eq(payrollAdjustments.status, "approved"), gte(payrollAdjustments.occurrenceDate, from), lte(payrollAdjustments.occurrenceDate, to))).orderBy(desc(payrollAdjustments.occurrenceDate)),
       ]);
       return { salary: salary[0] ?? null, approvedAdjustments: approvedAdjustments.filter(adjustment => !adjustment.payrollRunId) };
     }),

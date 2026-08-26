@@ -36,4 +36,12 @@ describe("role-based access", () => {
       code: "FORBIDDEN",
     });
   });
+
+  it("blocks a regular employee from reading the payroll simulation catalog", async () => {
+    const caller = appRouter.createCaller(createContext("user"));
+
+    await expect(caller.payroll.simulationCatalog({ branchId: 1, asOf: new Date("2026-08-25") })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+  });
 });
