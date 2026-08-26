@@ -1,5 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
+import { parse as parseCookie } from "cookie";
+import { SignJWT, jwtVerify } from "jose";
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import {
   accountLinkLogs,
@@ -27,6 +30,8 @@ import {
   leaveBalances,
   leaveRequests,
   notifications,
+  orderPortalAccounts,
+  orderPortalStaff,
   payrollApprovals,
   payrollAdjustments,
   payrollItems,
@@ -43,8 +48,10 @@ import { getDb, getEmployeeByUserId } from "./db";
 import { storageGet, storagePut } from "./storage";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { ENV } from "./_core/env";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import type { TrpcContext } from "./_core/context";
 
 const staffRoles = ["manager", "hr_manager", "pharmacist", "employee"] as const;
 const ownerRoles = ["admin", "owner"] as const;
@@ -53,7 +60,10 @@ const payrollRoles = ["admin", "owner", "manager", "hr_manager"] as const;
 const financialApproverRoles = ["admin", "owner", "hr_manager"] as const;
 const employeeStatusValues = ["active", "inactive", "on_leave"] as const;
 const accountLinkRequestStatusValues = ["pending", "approved", "rejected", "cancelled"] as const;
-const deliveryStatusValues = ["draft", "ready", "assigned", "picked_up", "en_route", "delivered", "failed", "returned", "cancelled"] as const;
+const deliveryStatusValues = ["draft", "contacted", "prepared", "ready", "assigned", "picked_up", "en_route", "delivered", "failed", "returned", "cancelled"] as const;
+const orderManagerStatusValues = ["draft", "contacted", "prepared", "ready", "cancelled"] as const;
+const ORDER_PORTAL_COOKIE = "pharmacy_order_portal";
+const ORDER_PORTAL_SESSION_SECONDS = 12 * 60 * 60;
 const employeeFieldLabels: Record<string, string> = { employeeCode: "الكود الوظيفي", fullName: "الاسم", phone: "الهاتف", email: "البريد الإلكتروني", jobTitle: "المسمى الوظيفي", role: "الدور", hireDate: "تاريخ التعيين", nationalId: "الرقم القومي", employmentStatus: "حالة الملف" };
 
 function auditValue(field: string, value: unknown) {
@@ -110,6 +120,61 @@ function endOfDay(value: Date) {
 
 function toNumber(value: string | number | null | undefined) {
   return Number(value ?? 0);
+}
+
+function orderPortalCookieOptions(req: TrpcContext["req"]) {
+  return { ...getSessionCookieOptions(req), maxAge: ORDER_PORTAL_SESSION_SECONDS * 1000 };
+}
+
+function orderPortalSecret() {
+  return new TextEncoder().encode(`${ENV.cookieSecret}:order-portal-v1`);
+}
+
+function hashOrderPortalPassword(password: string) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `scrypt-v1$${salt}$${hash}`;
+}
+
+function verifyOrderPortalPassword(password: string, stored: string) {
+  const [scheme, salt, expected] = stored.split("$");
+  if (scheme !== "scrypt-v1" || !salt || !expected) return false;
+  const computed = scryptSync(password, salt, 64).toString("hex");
+  return expected.length === computed.length && timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(computed, "hex"));
+}
+
+async function signOrderPortalSession(account: typeof orderPortalAccounts.$inferSelect) {
+  return new SignJWT({ accountId: account.id, sessionVersion: account.sessionVersion, scope: "order_portal" })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setIssuedAt()
+    .setExpirationTime(`${ORDER_PORTAL_SESSION_SECONDS}s`)
+    .sign(orderPortalSecret());
+}
+
+async function setOrderPortalSession(ctx: TrpcContext, account: typeof orderPortalAccounts.$inferSelect) {
+  const token = await signOrderPortalSession(account);
+  ctx.res.cookie(ORDER_PORTAL_COOKIE, token, orderPortalCookieOptions(ctx.req));
+}
+
+function clearOrderPortalSession(ctx: TrpcContext) {
+  ctx.res.clearCookie(ORDER_PORTAL_COOKIE, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
+}
+
+async function requireOrderPortalAccount(ctx: TrpcContext) {
+  const cookies = parseCookie(String(ctx.req.headers.cookie ?? ""));
+  const token = cookies[ORDER_PORTAL_COOKIE];
+  if (!token) throw new TRPCError({ code: "UNAUTHORIZED", message: "سجّل الدخول بحساب الصيدلية أولاً." });
+  try {
+    const { payload } = await jwtVerify(token, orderPortalSecret(), { algorithms: ["HS256"] });
+    if (payload.scope !== "order_portal" || !Number.isInteger(payload.accountId) || !Number.isInteger(payload.sessionVersion)) throw new Error("invalid portal session");
+    const db = await requireDb();
+    const account = (await db.select().from(orderPortalAccounts).where(eq(orderPortalAccounts.id, Number(payload.accountId))).limit(1))[0];
+    if (!account || account.isActive !== "yes" || account.sessionVersion !== Number(payload.sessionVersion)) throw new Error("expired portal session");
+    return account;
+  } catch {
+    clearOrderPortalSession(ctx);
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "انتهت جلسة حساب الصيدلية. سجّل الدخول مرة أخرى." });
+  }
 }
 
 async function requireDb() {
@@ -866,6 +931,145 @@ export const appRouter = router({
       const values = { ...input, lateMultiplier: String(input.lateMultiplier), monthlyLateMinuteCap: input.monthlyLateMinuteCap ?? null, updatedByUserId: ctx.user.id };
       await db.insert(attendancePolicies).values(values).onDuplicateKeyUpdate({ set: values });
       return { success: true };
+    }),
+  }),
+
+  orders: router({
+    portal: router({
+      session: publicProcedure.query(async ({ ctx }) => {
+        try {
+          const account = await requireOrderPortalAccount(ctx);
+          return { authenticated: true, account: { branchId: account.branchId, phoneUsername: account.phoneUsername } };
+        } catch (error) {
+          if (error instanceof TRPCError && error.code === "UNAUTHORIZED") return { authenticated: false, account: null };
+          throw error;
+        }
+      }),
+      login: publicProcedure.input(z.object({ phoneUsername: z.string().trim().min(6).max(32), password: z.string().min(8).max(128) })).mutation(async ({ ctx, input }) => {
+        const db = await requireDb();
+        const account = (await db.select().from(orderPortalAccounts).where(eq(orderPortalAccounts.phoneUsername, input.phoneUsername)).limit(1))[0];
+        const genericFailure = () => new TRPCError({ code: "UNAUTHORIZED", message: "بيانات الدخول غير صحيحة أو الحساب غير متاح." });
+        if (!account || account.isActive !== "yes") throw genericFailure();
+        const now = new Date();
+        if (account.lockedUntil && account.lockedUntil > now) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "تم إيقاف المحاولة مؤقتاً لحماية الحساب. أعد المحاولة لاحقاً." });
+        if (!verifyOrderPortalPassword(input.password, account.passwordHash)) {
+          const attempts = account.failedAttempts + 1;
+          const lockedUntil = attempts >= 5 ? new Date(now.getTime() + 15 * 60_000) : null;
+          await db.update(orderPortalAccounts).set({ failedAttempts: lockedUntil ? 0 : attempts, lockedUntil }).where(eq(orderPortalAccounts.id, account.id));
+          throw genericFailure();
+        }
+        await db.update(orderPortalAccounts).set({ failedAttempts: 0, lockedUntil: null, lastSignedInAt: now }).where(eq(orderPortalAccounts.id, account.id));
+        await setOrderPortalSession(ctx, account);
+        return { success: true, branchId: account.branchId };
+      }),
+      logout: publicProcedure.mutation(({ ctx }) => {
+        clearOrderPortalSession(ctx);
+        return { success: true };
+      }),
+      staff: publicProcedure.query(async ({ ctx }) => {
+        const account = await requireOrderPortalAccount(ctx);
+        const db = await requireDb();
+        return db.select({ id: orderPortalStaff.id, fullName: orderPortalStaff.fullName }).from(orderPortalStaff).where(and(eq(orderPortalStaff.branchId, account.branchId), eq(orderPortalStaff.isActive, "yes"))).orderBy(asc(orderPortalStaff.fullName));
+      }),
+      zones: publicProcedure.query(async ({ ctx }) => {
+        const account = await requireOrderPortalAccount(ctx);
+        const db = await requireDb();
+        return db.select({ id: deliveryZones.id, name: deliveryZones.name, slaMinutes: deliveryZones.slaMinutes }).from(deliveryZones).where(and(eq(deliveryZones.branchId, account.branchId), eq(deliveryZones.isActive, "yes"))).orderBy(asc(deliveryZones.name));
+      }),
+      list: publicProcedure.input(z.object({ status: z.enum(deliveryStatusValues).optional(), search: z.string().trim().max(120).optional() }).optional()).query(async ({ ctx, input }) => {
+        const account = await requireOrderPortalAccount(ctx);
+        const db = await requireDb();
+        const rows = await db.select({ order: deliveryOrders, requesterName: orderPortalStaff.fullName }).from(deliveryOrders).leftJoin(orderPortalStaff, eq(deliveryOrders.requestedByOrderStaffId, orderPortalStaff.id)).where(eq(deliveryOrders.branchId, account.branchId)).orderBy(desc(deliveryOrders.createdAt)).limit(150);
+        const search = input?.search?.toLocaleLowerCase("ar-EG");
+        return rows.filter(row => (!input?.status || row.order.status === input.status) && (!search || [row.order.orderCode, row.order.customerName, row.order.customerPhone, row.order.itemName ?? "", row.order.itemCode ?? "", row.requesterName ?? ""].some(value => value.toLocaleLowerCase("ar-EG").includes(search))));
+      }),
+      create: publicProcedure.input(z.object({ requestedByOrderStaffId: z.number().int().positive(), customerName: z.string().trim().min(2).max(160), customerPhone: z.string().trim().min(6).max(32), itemName: z.string().trim().min(2).max(200), itemCode: z.string().trim().max(80).optional(), quantity: z.number().int().min(1).max(999), address: z.string().trim().min(5).max(2000), deliveryZoneId: z.number().int().positive().optional(), notes: z.string().trim().max(1500).optional() })).mutation(async ({ ctx, input }) => {
+        const account = await requireOrderPortalAccount(ctx);
+        const db = await requireDb();
+        const staff = (await db.select().from(orderPortalStaff).where(eq(orderPortalStaff.id, input.requestedByOrderStaffId)).limit(1))[0];
+        if (!staff || staff.branchId !== account.branchId || staff.isActive !== "yes") throw new TRPCError({ code: "FORBIDDEN", message: "اختر اسماً نشطاً ومصرحاً به من القائمة." });
+        let zone: typeof deliveryZones.$inferSelect | undefined;
+        if (input.deliveryZoneId) {
+          zone = (await db.select().from(deliveryZones).where(eq(deliveryZones.id, input.deliveryZoneId)).limit(1))[0];
+          if (!zone || zone.branchId !== account.branchId || zone.isActive !== "yes") throw new TRPCError({ code: "BAD_REQUEST", message: "منطقة التوصيل غير صالحة." });
+        }
+        const orderCode = `ORD-${new Date().toISOString().slice(2, 10).replaceAll("-", "")}-${nanoid(5).toUpperCase()}`;
+        const inserted = await db.insert(deliveryOrders).values({ branchId: account.branchId, deliveryZoneId: input.deliveryZoneId ?? null, requestedByOrderStaffId: staff.id, createdByOrderAccountId: account.id, orderCode, customerName: input.customerName, customerPhone: input.customerPhone, itemName: input.itemName, itemCode: input.itemCode || null, quantity: input.quantity, address: input.address, slaDueAt: zone ? new Date(Date.now() + zone.slaMinutes * 60_000) : null, notes: input.notes || null, status: "draft" });
+        const orderId = Number(inserted[0].insertId);
+        await db.insert(deliveryEvents).values({ deliveryOrderId: orderId, action: "created", note: `تم إدخال الطلب بواسطة ${staff.fullName}.` });
+        return { success: true, orderId, orderCode };
+      }),
+    }),
+    admin: router({
+      account: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+        await assertBranchScope(ctx.user, input.branchId);
+        const db = await requireDb();
+        const account = (await db.select().from(orderPortalAccounts).where(eq(orderPortalAccounts.branchId, input.branchId)).orderBy(desc(orderPortalAccounts.updatedAt)).limit(1))[0] ?? null;
+        return account ? { id: account.id, phoneUsername: account.phoneUsername, isActive: account.isActive, failedAttempts: account.failedAttempts, lockedUntil: account.lockedUntil, lastSignedInAt: account.lastSignedInAt, updatedAt: account.updatedAt } : null;
+      }),
+      saveAccount: managerProcedure.input(z.object({ branchId: z.number().int().positive(), phoneUsername: z.string().trim().min(6).max(32), password: z.string().min(8).max(128).optional(), isActive: z.enum(["yes", "no"]).default("yes") })).mutation(async ({ ctx, input }) => {
+        await assertBranchScope(ctx.user, input.branchId);
+        const db = await requireDb();
+        const existing = (await db.select().from(orderPortalAccounts).where(eq(orderPortalAccounts.branchId, input.branchId)).orderBy(desc(orderPortalAccounts.updatedAt)).limit(1))[0];
+        if (!existing && !input.password) throw new TRPCError({ code: "BAD_REQUEST", message: "أنشئ كلمة مرور لا تقل عن 8 أحرف لحساب الصيدلية." });
+        try {
+          if (existing) {
+            const shouldInvalidate = Boolean(input.password) || existing.isActive !== input.isActive || existing.phoneUsername !== input.phoneUsername;
+            await db.update(orderPortalAccounts).set({ phoneUsername: input.phoneUsername, passwordHash: input.password ? hashOrderPortalPassword(input.password) : existing.passwordHash, isActive: input.isActive, sessionVersion: shouldInvalidate ? existing.sessionVersion + 1 : existing.sessionVersion, failedAttempts: 0, lockedUntil: null }).where(eq(orderPortalAccounts.id, existing.id));
+            return { success: true, created: false };
+          }
+          await db.insert(orderPortalAccounts).values({ branchId: input.branchId, phoneUsername: input.phoneUsername, passwordHash: hashOrderPortalPassword(input.password!), isActive: input.isActive, createdByUserId: ctx.user.id });
+          return { success: true, created: true };
+        } catch {
+          throw new TRPCError({ code: "CONFLICT", message: "رقم الهاتف مستخدم لحساب صيدلية آخر أو تعذر حفظ الإعداد." });
+        }
+      }),
+      staff: managerProcedure.input(z.object({ branchId: z.number().int().positive(), includeInactive: z.boolean().optional() })).query(async ({ ctx, input }) => {
+        await assertBranchScope(ctx.user, input.branchId);
+        const db = await requireDb();
+        const rows = await db.select().from(orderPortalStaff).where(eq(orderPortalStaff.branchId, input.branchId)).orderBy(asc(orderPortalStaff.fullName));
+        return input.includeInactive ? rows : rows.filter(row => row.isActive === "yes");
+      }),
+      saveStaff: managerProcedure.input(z.object({ id: z.number().int().positive().optional(), branchId: z.number().int().positive(), fullName: z.string().trim().min(3).max(160), phone: z.string().trim().max(32).optional(), isActive: z.enum(["yes", "no"]).default("yes") })).mutation(async ({ ctx, input }) => {
+        await assertBranchScope(ctx.user, input.branchId);
+        const db = await requireDb();
+        const values = { branchId: input.branchId, fullName: input.fullName, phone: input.phone || null, isActive: input.isActive };
+        try {
+          if (input.id) {
+            const existing = (await db.select().from(orderPortalStaff).where(eq(orderPortalStaff.id, input.id)).limit(1))[0];
+            if (!existing || existing.branchId !== input.branchId) throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك تعديل هذا الاسم." });
+            await db.update(orderPortalStaff).set(values).where(eq(orderPortalStaff.id, input.id));
+            return { success: true, id: input.id };
+          }
+          const inserted = await db.insert(orderPortalStaff).values({ ...values, createdByUserId: ctx.user.id });
+          return { success: true, id: Number(inserted[0].insertId) };
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          throw new TRPCError({ code: "CONFLICT", message: "الاسم مسجل مسبقاً في هذا الفرع." });
+        }
+      }),
+      list: managerProcedure.input(z.object({ branchId: z.number().int().positive(), status: z.enum(deliveryStatusValues).optional(), search: z.string().trim().max(120).optional() })).query(async ({ ctx, input }) => {
+        await assertBranchScope(ctx.user, input.branchId);
+        const db = await requireDb();
+        const rows = await db.select({ order: deliveryOrders, requesterName: orderPortalStaff.fullName, accountPhone: orderPortalAccounts.phoneUsername, zoneName: deliveryZones.name, courierName: employees.fullName }).from(deliveryOrders).leftJoin(orderPortalStaff, eq(deliveryOrders.requestedByOrderStaffId, orderPortalStaff.id)).leftJoin(orderPortalAccounts, eq(deliveryOrders.createdByOrderAccountId, orderPortalAccounts.id)).leftJoin(deliveryZones, eq(deliveryOrders.deliveryZoneId, deliveryZones.id)).leftJoin(employees, eq(deliveryOrders.assignedEmployeeId, employees.id)).where(eq(deliveryOrders.branchId, input.branchId)).orderBy(desc(deliveryOrders.createdAt));
+        const search = input.search?.toLocaleLowerCase("ar-EG");
+        return rows.filter(row => (!input.status || row.order.status === input.status) && (!search || [row.order.orderCode, row.order.customerName, row.order.customerPhone, row.order.itemName ?? "", row.order.itemCode ?? "", row.requesterName ?? "", row.courierName ?? ""].some(value => value.toLocaleLowerCase("ar-EG").includes(search))));
+      }),
+      updateStatus: managerProcedure.input(z.object({ orderId: z.number().int().positive(), status: z.enum(orderManagerStatusValues), note: z.string().trim().max(1000).optional() })).mutation(async ({ ctx, input }) => {
+        const db = await requireDb();
+        const order = (await db.select().from(deliveryOrders).where(eq(deliveryOrders.id, input.orderId)).limit(1))[0];
+        if (!order) throw new TRPCError({ code: "NOT_FOUND", message: "الطلب غير موجود." });
+        await assertBranchScope(ctx.user, order.branchId);
+        if (input.status === "cancelled" && !input.note) throw new TRPCError({ code: "BAD_REQUEST", message: "أضف سبب الإلغاء لحماية سجل العميل." });
+        const now = new Date();
+        const update: Partial<typeof deliveryOrders.$inferInsert> = { status: input.status };
+        if (input.status === "contacted") update.contactedAt = now;
+        if (input.status === "prepared" || input.status === "ready") update.preparedAt = now;
+        if (input.status === "cancelled") update.cancelledAt = now;
+        await db.update(deliveryOrders).set(update).where(eq(deliveryOrders.id, order.id));
+        await db.insert(deliveryEvents).values({ deliveryOrderId: order.id, action: input.status === "cancelled" ? "cancelled" : "note", note: `${{ draft: "تمت مراجعة الطلب", contacted: "تم التواصل مع العميل", prepared: "الطلب قيد التجهيز", ready: "الطلب جاهز للتوصيل", cancelled: "تم إلغاء الطلب" }[input.status]}${input.note ? `: ${input.note}` : ""}` });
+        return { success: true };
+      }),
     }),
   }),
 

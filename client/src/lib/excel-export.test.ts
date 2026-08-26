@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createExcelCompatibleCsv, createExcelWorkbook, mapAccountLinkHistoryToExcelRows, mapBranchComparisonToExcelRows, mapDashboardReportToExcelRows, mapEmployeeAuditToExcelRows } from "./excel-export";
+import { createExcelCompatibleCsv, createExcelWorkbook, mapAccountLinkHistoryToExcelRows, mapBranchComparisonToExcelRows, mapDashboardReportToExcelRows, mapEmployeeAuditToExcelRows, mapOrderPortalToExcelRows } from "./excel-export";
 
 describe("تصدير CSV المتوافق مع Excel", () => {
   it("يحوّل تغييرات سجل الموظف إلى صفوف عربية ويحتفظ بالقيم غير المحددة", () => {
@@ -48,5 +48,11 @@ describe("تصدير CSV المتوافق مع Excel", () => {
   it("يحوّل مقارنة الفروع الشهرية إلى صفوف مرتبة مع فرق موجب وقيم غير متاحة", () => {
     const rows = mapBranchComparisonToExcelRows([{ branchName: "فرع المنصورة", branchCode: "MAN-01", expectedDays: 22, complianceScore: 91.25, attendanceRate: 96.5, punctualityRate: 90, hoursRate: 88.75, totalLateMinutes: 45, previousComplianceScore: 88, monthlyChange: 3.25 }]);
     expect(rows[0]).toEqual([1, "فرع المنصورة", "MAN-01", 22, "91.3%", "96.5%", "90.0%", "88.8%", 45, "88.0%", "+3.3 نقطة"]);
+  });
+
+  it("يحوّل طلبات الصيدلية إلى ملف Excel بحالة عربية وسجل إدخال واضح", () => {
+    const rows = mapOrderPortalToExcelRows([{ requesterName: "هبة", zoneName: "المشاية", courierName: null, order: { orderCode: "ORD-01", customerName: "عميل", customerPhone: "01000000000", itemName: "=صنف", itemCode: "MED-1", quantity: 2, address: "المنصورة", status: "contacted", createdAt: new Date("2026-08-26T10:00:00Z"), contactedAt: new Date("2026-08-26T10:10:00Z"), preparedAt: null, deliveredAt: null, notes: null } }]);
+    expect(rows[0]?.slice(0, 10)).toEqual(["ORD-01", "عميل", "01000000000", "=صنف", "MED-1", 2, "تم التواصل", "هبة", "المشاية", "—"]);
+    expect(new TextDecoder().decode(createExcelWorkbook(["الطلب"], rows, "طلبات"))).toContain("&apos;=صنف");
   });
 });

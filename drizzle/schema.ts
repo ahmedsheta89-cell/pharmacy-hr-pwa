@@ -442,16 +442,24 @@ export const deliveryOrders = mysqlTable("deliveryOrders", {
   id: int("id").autoincrement().primaryKey(),
   branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
   deliveryZoneId: int("deliveryZoneId").references(() => deliveryZones.id, { onDelete: "set null" }),
+  requestedByOrderStaffId: int("requestedByOrderStaffId").references(() => orderPortalStaff.id, { onDelete: "set null" }),
+  createdByOrderAccountId: int("createdByOrderAccountId").references(() => orderPortalAccounts.id, { onDelete: "set null" }),
   orderCode: varchar("orderCode", { length: 48 }).notNull(),
   customerName: varchar("customerName", { length: 160 }).notNull(),
   customerPhone: varchar("customerPhone", { length: 32 }).notNull(),
+  itemName: varchar("itemName", { length: 200 }),
+  itemCode: varchar("itemCode", { length: 80 }),
+  quantity: int("quantity").default(1).notNull(),
   address: text("address").notNull(),
   destinationLatitude: decimal("destinationLatitude", { precision: 10, scale: 7 }),
   destinationLongitude: decimal("destinationLongitude", { precision: 10, scale: 7 }),
   promisedAt: timestamp("promisedAt"),
   slaDueAt: timestamp("slaDueAt"),
   slaAlertedAt: timestamp("slaAlertedAt"),
-  status: mysqlEnum("status", ["draft", "ready", "assigned", "picked_up", "en_route", "delivered", "failed", "returned", "cancelled"]).default("draft").notNull(),
+  contactedAt: timestamp("contactedAt"),
+  preparedAt: timestamp("preparedAt"),
+  cancelledAt: timestamp("cancelledAt"),
+  status: mysqlEnum("status", ["draft", "contacted", "prepared", "ready", "assigned", "picked_up", "en_route", "delivered", "failed", "returned", "cancelled"]).default("draft").notNull(),
   assignedEmployeeId: int("assignedEmployeeId").references(() => employees.id, { onDelete: "set null" }),
   pickedUpAt: timestamp("pickedUpAt"),
   deliveredAt: timestamp("deliveredAt"),
@@ -482,6 +490,38 @@ export const deliveryZones = mysqlTable("deliveryZones", {
 }, table => [
   uniqueIndex("delivery_zone_branch_name_unique").on(table.branchId, table.name),
   index("delivery_zone_branch_active_idx").on(table.branchId, table.isActive),
+]);
+
+export const orderPortalAccounts = mysqlTable("orderPortalAccounts", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  phoneUsername: varchar("phoneUsername", { length: 32 }).notNull(),
+  passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  sessionVersion: int("sessionVersion").default(1).notNull(),
+  failedAttempts: int("failedAttempts").default(0).notNull(),
+  lockedUntil: timestamp("lockedUntil"),
+  lastSignedInAt: timestamp("lastSignedInAt"),
+  isActive: mysqlEnum("isActive", ["yes", "no"]).default("yes").notNull(),
+  createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  uniqueIndex("order_portal_phone_unique").on(table.phoneUsername),
+  index("order_portal_branch_active_idx").on(table.branchId, table.isActive),
+]);
+
+export const orderPortalStaff = mysqlTable("orderPortalStaff", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  fullName: varchar("fullName", { length: 160 }).notNull(),
+  phone: varchar("phone", { length: 32 }),
+  isActive: mysqlEnum("isActive", ["yes", "no"]).default("yes").notNull(),
+  createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  uniqueIndex("order_portal_staff_branch_name_unique").on(table.branchId, table.fullName),
+  index("order_portal_staff_branch_active_idx").on(table.branchId, table.isActive),
 ]);
 
 export const deliveryEvents = mysqlTable("deliveryEvents", {
