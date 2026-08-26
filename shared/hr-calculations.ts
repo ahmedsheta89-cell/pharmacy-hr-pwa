@@ -23,6 +23,7 @@ export type PayrollInput = {
 
 export type AttendanceRuleMetric = "late_minutes" | "late_occurrences" | "absence_days" | "early_leave_minutes" | "overtime_minutes";
 export type AttendanceRuleAmountMode = "fixed" | "per_unit" | "daily_rate_percentage";
+export type KpiDirection = "higher_better" | "lower_better";
 
 export function calculateAttendanceCompliance(records: AttendanceDay[]) {
   const summary = calculateAttendanceSummary(records);
@@ -72,8 +73,9 @@ export function calculateAttendanceSummary(records: AttendanceDay[]) {
   };
 }
 
-export function calculateKpiScore(actualValue: number, targetValue: number): number {
+export function calculateKpiScore(actualValue: number, targetValue: number, direction: KpiDirection = "higher_better"): number {
   if (targetValue <= 0 || actualValue < 0) return 0;
+  if (direction === "lower_better") return roundCurrency(Math.min((targetValue / Math.max(actualValue, 0.000001)) * 100, 100));
   return roundCurrency(Math.min((actualValue / targetValue) * 100, 100));
 }
 

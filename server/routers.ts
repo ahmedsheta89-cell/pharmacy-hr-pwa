@@ -802,10 +802,38 @@ export const appRouter = router({
       if (input?.branchId) await assertBranchScope(ctx.user, input.branchId);
       return db.select().from(kpiDefinitions).where(and(eq(kpiDefinitions.branchId, branchId), eq(kpiDefinitions.isActive, "yes"))).orderBy(asc(kpiDefinitions.name));
     }),
-    createDefinition: managerProcedure.input(z.object({ branchId: z.number().int().positive(), name: z.string().trim().min(2).max(160), category: z.enum(["sales", "operations", "service", "attendance"]), description: z.string().trim().max(1000).optional(), unit: z.enum(["currency", "number", "percentage", "minutes"]), targetValue: z.number().positive(), weight: z.number().positive().max(100).default(1), measurementPeriod: z.enum(["daily", "weekly", "monthly"]).default("monthly"), applicableRoles: z.array(z.enum(staffRoles)).min(1) })).mutation(async ({ ctx, input }) => {
+    operationsSnapshot: managerProcedure.input(z.object({ branchId: z.number().int().positive(), from: z.coerce.date(), to: z.coerce.date() }).refine(input => input.to >= input.from, { message: "نطاق الفترة غير صالح." })).query(async ({ ctx, input }) => {
       await assertBranchScope(ctx.user, input.branchId);
       const db = await requireDb();
-      await db.insert(kpiDefinitions).values({ ...input, targetValue: String(input.targetValue), weight: String(input.weight), description: input.description || null, applicableRoles: input.applicableRoles });
+      const from = startOfDay(input.from);
+      const to = endOfDay(input.to);
+      const [definitions, team, recorded] = await Promise.all([
+        db.select({ definition: kpiDefinitions, ownerName: employees.fullName }).from(kpiDefinitions).leftJoin(employees, eq(kpiDefinitions.ownerEmployeeId, employees.id)).where(and(eq(kpiDefinitions.branchId, input.branchId), eq(kpiDefinitions.isActive, "yes"))).orderBy(asc(kpiDefinitions.name)),
+        db.select({ id: employees.id, fullName: employees.fullName, role: employees.role, employeeCode: employees.employeeCode }).from(employees).where(and(eq(employees.branchId, input.branchId), eq(employees.employmentStatus, "active"))).orderBy(asc(employees.fullName)),
+        db.select({ record: kpiRecords, employeeName: employees.fullName, employeeCode: employees.employeeCode }).from(kpiRecords).innerJoin(employees, eq(kpiRecords.employeeId, employees.id)).where(and(eq(employees.branchId, input.branchId), gte(kpiRecords.periodStart, from), lte(kpiRecords.periodEnd, to))).orderBy(desc(kpiRecords.updatedAt)),
+      ]);
+      const recordsByKey = new Map<number, typeof recorded[number]>();
+      for (const item of recorded) if (!recordsByKey.has(item.record.kpiDefinitionId * 1_000_000 + item.record.employeeId)) recordsByKey.set(item.record.kpiDefinitionId * 1_000_000 + item.record.employeeId, item);
+      const indicators = definitions.map(({ definition, ownerName }) => {
+        const eligible = team.filter(employee => (definition.applicableRoles as string[]).includes(employee.role));
+        const records = eligible.flatMap(employee => {
+          const item = recordsByKey.get(definition.id * 1_000_000 + employee.id);
+          return item ? [{ ...item, employee }] : [];
+        });
+        const attention = records.filter(item => toNumber(item.record.score) < 80).length;
+        const status = eligible.length === 0 ? "not_applicable" as const : records.length === 0 ? "not_started" as const : records.length < eligible.length ? "incomplete" as const : attention > 0 ? "attention" as const : "on_track" as const;
+        return { definition, ownerName: ownerName ?? null, eligibleCount: eligible.length, recordedCount: records.length, missingCount: Math.max(eligible.length - records.length, 0), attentionCount: attention, status, records };
+      });
+      return { period: { from, to }, indicators, totalDefinitions: indicators.length, onTrackCount: indicators.filter(item => item.status === "on_track").length, attentionCount: indicators.filter(item => item.status === "attention" || item.status === "incomplete" || item.status === "not_started").length };
+    }),
+    createDefinition: managerProcedure.input(z.object({ branchId: z.number().int().positive(), ownerEmployeeId: z.number().int().positive().nullable().optional(), name: z.string().trim().min(2).max(160), category: z.enum(["sales", "operations", "service", "attendance"]), description: z.string().trim().max(1000).optional(), unit: z.enum(["currency", "number", "percentage", "minutes"]), direction: z.enum(["higher_better", "lower_better"]).default("higher_better"), targetValue: z.number().positive(), weight: z.number().positive().max(100).default(1), measurementPeriod: z.enum(["daily", "weekly", "monthly"]).default("monthly"), applicableRoles: z.array(z.enum(staffRoles)).min(1) })).mutation(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      if (input.ownerEmployeeId) {
+        const owner = (await db.select().from(employees).where(eq(employees.id, input.ownerEmployeeId)).limit(1))[0];
+        if (!owner || owner.branchId !== input.branchId) throw new TRPCError({ code: "BAD_REQUEST", message: "مالك المؤشر يجب أن يكون موظفاً في الفرع نفسه." });
+      }
+      await db.insert(kpiDefinitions).values({ ...input, ownerEmployeeId: input.ownerEmployeeId ?? null, targetValue: String(input.targetValue), weight: String(input.weight), description: input.description || null, applicableRoles: input.applicableRoles });
       return { success: true };
     }),
     record: managerProcedure.input(z.object({ employeeId: z.number().int().positive(), kpiDefinitionId: z.number().int().positive(), periodStart: z.coerce.date(), periodEnd: z.coerce.date(), actualValue: z.number().min(0), notes: z.string().trim().max(1000).optional() })).mutation(async ({ ctx, input }) => {
@@ -814,7 +842,7 @@ export const appRouter = router({
       const definition = (await db.select().from(kpiDefinitions).where(eq(kpiDefinitions.id, input.kpiDefinitionId)).limit(1))[0];
       if (!employee || !definition || definition.branchId !== employee.branchId) throw new TRPCError({ code: "BAD_REQUEST", message: "الموظف أو المؤشر غير صالحين." });
       await assertBranchScope(ctx.user, employee.branchId);
-      const score = calculateKpiScore(input.actualValue, toNumber(definition.targetValue));
+      const score = calculateKpiScore(input.actualValue, toNumber(definition.targetValue), definition.direction);
       const recorder = await requireEmployeeProfile(ctx.user.id);
       await db.insert(kpiRecords).values({ employeeId: input.employeeId, kpiDefinitionId: input.kpiDefinitionId, periodStart: startOfDay(input.periodStart), periodEnd: startOfDay(input.periodEnd), actualValue: String(input.actualValue), targetValue: String(definition.targetValue), achievementPercentage: String(score), score: String(score), recordedByEmployeeId: recorder.id, notes: input.notes || null }).onDuplicateKeyUpdate({ set: { actualValue: String(input.actualValue), targetValue: String(definition.targetValue), achievementPercentage: String(score), score: String(score), recordedByEmployeeId: recorder.id, notes: input.notes || null } });
       return { success: true, score };
@@ -896,14 +924,14 @@ export const appRouter = router({
     zones: managerProcedure.input(z.object({ branchId: z.number().int().positive(), activeOnly: z.boolean().optional() })).query(async ({ ctx, input }) => {
       await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const rows = await db.select().from(deliveryZones).where(eq(deliveryZones.branchId, input.branchId)).orderBy(asc(deliveryZones.name)); return input.activeOnly ? rows.filter(row => row.isActive === "yes") : rows;
     }),
-    saveZone: managerProcedure.input(z.object({ id: z.number().int().positive().optional(), branchId: z.number().int().positive(), name: z.string().trim().min(2).max(160), code: z.string().trim().max(32).optional(), description: z.string().trim().max(2000).optional(), slaMinutes: z.number().int().min(5).max(1440), isActive: z.enum(["yes", "no"]).default("yes") })).mutation(async ({ ctx, input }) => {
-      await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const values = { branchId: input.branchId, name: input.name, code: input.code || null, description: input.description || null, slaMinutes: input.slaMinutes, isActive: input.isActive };
+    saveZone: managerProcedure.input(z.object({ id: z.number().int().positive().optional(), branchId: z.number().int().positive(), name: z.string().trim().min(2).max(160), code: z.string().trim().max(32).optional(), description: z.string().trim().max(2000).optional(), slaMinutes: z.number().int().min(5).max(1440), slaWarningMinutes: z.number().int().min(1).max(720).default(10), isActive: z.enum(["yes", "no"]).default("yes") }).refine(input => input.slaWarningMinutes < input.slaMinutes, { message: "يجب أن تكون نافذة التحذير أقل من SLA المنطقة." })).mutation(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const values = { branchId: input.branchId, name: input.name, code: input.code || null, description: input.description || null, slaMinutes: input.slaMinutes, slaWarningMinutes: input.slaWarningMinutes, isActive: input.isActive };
       if (input.id) { const current = (await db.select().from(deliveryZones).where(eq(deliveryZones.id, input.id)).limit(1))[0]; if (!current || current.branchId !== input.branchId) throw new TRPCError({ code: "FORBIDDEN", message: "لا تملك صلاحية تعديل هذه المنطقة." }); await db.update(deliveryZones).set(values).where(eq(deliveryZones.id, input.id)); return { success: true, id: input.id }; }
       const result = await db.insert(deliveryZones).values(values); return { success: true, id: Number(result[0].insertId) };
     }),
     slaAlerts: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
-      await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const now = new Date(); const warningAt = new Date(now.getTime() + 10 * 60_000); const rows = await db.select({ order: deliveryOrders, agentName: employees.fullName, zoneName: deliveryZones.name }).from(deliveryOrders).leftJoin(employees, eq(deliveryOrders.assignedEmployeeId, employees.id)).leftJoin(deliveryZones, eq(deliveryOrders.deliveryZoneId, deliveryZones.id)).where(eq(deliveryOrders.branchId, input.branchId));
-      return rows.filter(row => ["assigned", "picked_up", "en_route"].includes(row.order.status) && row.order.slaDueAt).map(row => ({ ...row, state: row.order.slaDueAt! <= now ? "breached" as const : row.order.slaDueAt! <= warningAt ? "at_risk" as const : "on_track" as const, minutesRemaining: Math.ceil((row.order.slaDueAt!.getTime() - now.getTime()) / 60_000) })).filter(row => row.state !== "on_track");
+      await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const now = new Date(); const rows = await db.select({ order: deliveryOrders, agentName: employees.fullName, zoneName: deliveryZones.name, zoneWarningMinutes: deliveryZones.slaWarningMinutes }).from(deliveryOrders).leftJoin(employees, eq(deliveryOrders.assignedEmployeeId, employees.id)).leftJoin(deliveryZones, eq(deliveryOrders.deliveryZoneId, deliveryZones.id)).where(eq(deliveryOrders.branchId, input.branchId));
+      return rows.filter(row => ["assigned", "picked_up", "en_route"].includes(row.order.status) && row.order.slaDueAt).map(row => { const warningAt = new Date(now.getTime() + (row.zoneWarningMinutes ?? 10) * 60_000); return { ...row, state: row.order.slaDueAt! <= now ? "breached" as const : row.order.slaDueAt! <= warningAt ? "at_risk" as const : "on_track" as const, minutesRemaining: Math.ceil((row.order.slaDueAt!.getTime() - now.getTime()) / 60_000), warningMinutes: row.zoneWarningMinutes ?? 10 }; }).filter(row => row.state !== "on_track");
     }),
     weeklyReport: managerProcedure.input(z.object({ branchId: z.number().int().positive(), weekStart: z.coerce.date().optional() })).query(async ({ ctx, input }) => {
       await assertBranchScope(ctx.user, input.branchId); const db = await requireDb(); const today = input.weekStart ? new Date(input.weekStart) : new Date(); const day = today.getDay() || 7; const start = new Date(today); start.setDate(today.getDate() - day + 1); start.setHours(0, 0, 0, 0); const end = new Date(start); end.setDate(start.getDate() + 7);
@@ -1107,6 +1135,34 @@ export const appRouter = router({
       if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "مسير الرواتب غير موجود." });
       await assertBranchScope(ctx.user, run.branchId);
       return db.select({ approval: payrollApprovals, approver: employees }).from(payrollApprovals).leftJoin(employees, eq(payrollApprovals.approverEmployeeId, employees.id)).where(eq(payrollApprovals.payrollRunId, input.payrollRunId)).orderBy(desc(payrollApprovals.createdAt));
+    }),
+    readiness: payrollProcedure.input(z.object({ branchId: z.number().int().positive(), year: z.number().int().min(2024).max(2100), month: z.number().int().min(1).max(12) })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      const from = new Date(input.year, input.month - 1, 1);
+      const to = new Date(input.year, input.month, 0, 23, 59, 59, 999);
+      const [team, structures, adjustments, run] = await Promise.all([
+        db.select().from(employees).where(and(eq(employees.branchId, input.branchId), eq(employees.employmentStatus, "active"))).orderBy(asc(employees.fullName)),
+        db.select().from(salaryStructures).where(and(lte(salaryStructures.effectiveFrom, to), or(isNull(salaryStructures.effectiveTo), gte(salaryStructures.effectiveTo, from)))).orderBy(desc(salaryStructures.effectiveFrom)),
+        db.select().from(payrollAdjustments).where(and(eq(payrollAdjustments.branchId, input.branchId), eq(payrollAdjustments.status, "pending"), gte(payrollAdjustments.occurrenceDate, from), lte(payrollAdjustments.occurrenceDate, to))),
+        db.select().from(payrollRuns).where(and(eq(payrollRuns.branchId, input.branchId), eq(payrollRuns.year, input.year), eq(payrollRuns.month, input.month))).limit(1),
+      ]);
+      const readiness = team.map(employee => {
+        const salary = structures.find(item => item.employeeId === employee.id);
+        const pendingAdjustments = adjustments.filter(item => item.employeeId === employee.id).length;
+        const blockers = [!salary ? "missing_salary_structure" : null, pendingAdjustments ? "pending_adjustment_review" : null].filter(Boolean) as ("missing_salary_structure" | "pending_adjustment_review")[];
+        return { employeeId: employee.id, fullName: employee.fullName, employeeCode: employee.employeeCode, hasSalaryStructure: Boolean(salary), pendingAdjustments, status: blockers.length ? "needs_review" as const : "ready" as const, blockers };
+      });
+      return { period: { year: input.year, month: input.month }, existingRun: run[0] ?? null, totalEmployees: readiness.length, readyEmployees: readiness.filter(item => item.status === "ready").length, needsReviewEmployees: readiness.filter(item => item.status === "needs_review").length, pendingAdjustments: adjustments.length, employees: readiness };
+    }),
+    submitBatchForApproval: managerProcedure.input(z.object({ branchId: z.number().int().positive(), payrollRunIds: z.array(z.number().int().positive()).min(1).max(25) }).refine(input => new Set(input.payrollRunIds).size === input.payrollRunIds.length, { message: "توجد مسيرات مكررة في طلب الاعتماد." })).mutation(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      const runs = await Promise.all(input.payrollRunIds.map(id => db.select().from(payrollRuns).where(eq(payrollRuns.id, id)).limit(1).then(rows => rows[0])));
+      if (runs.some(run => !run || run.branchId !== input.branchId)) throw new TRPCError({ code: "FORBIDDEN", message: "تتضمن الدفعة مسيراً خارج نطاق الفرع أو غير موجود." });
+      if (runs.some(run => run!.status !== "draft" && run!.status !== "rejected")) throw new TRPCError({ code: "CONFLICT", message: "لا يمكن إرسال كل المسيرات المختارة لاعتماد المدير في حالتها الحالية." });
+      await db.transaction(async tx => { for (const run of runs) await tx.update(payrollRuns).set({ status: "pending_manager" }).where(eq(payrollRuns.id, run!.id)); });
+      return { success: true, submittedCount: runs.length };
     }),
     listRuns: payrollProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
       await assertBranchScope(ctx.user, input.branchId);

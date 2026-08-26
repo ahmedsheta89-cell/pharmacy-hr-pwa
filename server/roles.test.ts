@@ -44,4 +44,12 @@ describe("role-based access", () => {
       code: "FORBIDDEN",
     });
   });
+
+  it("blocks a regular employee from payroll readiness, batch approval, and KPI operations", async () => {
+    const caller = appRouter.createCaller(createContext("user"));
+
+    await expect(caller.payroll.readiness({ branchId: 1, year: 2026, month: 8 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.payroll.submitBatchForApproval({ branchId: 1, payrollRunIds: [1] })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.kpis.operationsSnapshot({ branchId: 1, from: new Date("2026-08-01"), to: new Date("2026-08-31") })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
 });
