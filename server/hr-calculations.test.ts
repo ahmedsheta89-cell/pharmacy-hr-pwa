@@ -18,6 +18,12 @@ describe("HR calculation engine", () => {
     expect(calculateKpiScore(100, 0)).toBe(0);
   });
 
+  it("scores lower-is-better KPI metrics without exceeding one hundred percent", () => {
+    expect(calculateKpiScore(5, 10, "lower_better")).toBe(100);
+    expect(calculateKpiScore(20, 10, "lower_better")).toBe(50);
+    expect(calculateKpiScore(0, 10, "lower_better")).toBe(100);
+  });
+
   it("calculates a transparent compliance score from attendance, punctuality, and worked hours", () => {
     const compliance = calculateAttendanceCompliance([
       { scheduledMinutes: 480, workedMinutes: 480, lateMinutes: 0, earlyLeaveMinutes: 0, overtimeMinutes: 20, status: "present" },
