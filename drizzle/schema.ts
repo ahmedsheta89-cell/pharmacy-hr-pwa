@@ -138,12 +138,15 @@ export const attendanceRecords = mysqlTable("attendanceRecords", {
   checkOutLatitude: decimal("checkOutLatitude", { precision: 10, scale: 7 }),
   checkOutLongitude: decimal("checkOutLongitude", { precision: 10, scale: 7 }),
   checkInPhotoUrl: text("checkInPhotoUrl"),
+  scheduledMinutes: int("scheduledMinutes").default(0).notNull(),
   workedMinutes: int("workedMinutes").default(0).notNull(),
   lateMinutes: int("lateMinutes").default(0).notNull(),
   earlyLeaveMinutes: int("earlyLeaveMinutes").default(0).notNull(),
   overtimeMinutes: int("overtimeMinutes").default(0).notNull(),
   status: mysqlEnum("status", ["present", "late", "absent", "excused"]).default("present").notNull(),
   source: mysqlEnum("source", ["self_service", "import", "manual"]).default("self_service").notNull(),
+  analysisTreatment: mysqlEnum("analysisTreatment", ["scheduled", "approved_normal", "approved_alternative", "hourly_review", "overtime_review", "unapproved_shortfall", "exclude_from_analysis"]).default("scheduled").notNull(),
+  analysisSchedule: json("analysisSchedule").$type<{ shiftStart: string; shiftEnd: string; breakMinutes: number; graceMinutes: number } | null>(),
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -429,6 +432,10 @@ export const attendancePolicies = mysqlTable("attendancePolicies", {
   id: int("id").autoincrement().primaryKey(),
   branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
   graceMinutes: int("graceMinutes").default(15).notNull(),
+  analysisShiftStart: time("analysisShiftStart").default("09:00:00").notNull(),
+  analysisShiftEnd: time("analysisShiftEnd").default("17:00:00").notNull(),
+  analysisBreakMinutes: int("analysisBreakMinutes").default(0).notNull(),
+  analysisTargetScore: int("analysisTargetScore").default(90).notNull(),
   lateMultiplier: decimal("lateMultiplier", { precision: 4, scale: 2 }).default("1.00").notNull(),
   monthlyLateMinuteCap: int("monthlyLateMinuteCap"),
   pointsPerLateOccurrence: int("pointsPerLateOccurrence").default(0).notNull(),
@@ -437,6 +444,43 @@ export const attendancePolicies = mysqlTable("attendancePolicies", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, table => [uniqueIndex("attendance_policy_branch_unique").on(table.branchId)]);
+
+export const attendanceEmployeeSchedules = mysqlTable("attendanceEmployeeSchedules", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  employeeId: int("employeeId").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  shiftStart: time("shiftStart").notNull(),
+  shiftEnd: time("shiftEnd").notNull(),
+  breakMinutes: int("breakMinutes").default(0).notNull(),
+  graceMinutes: int("graceMinutes").default(15).notNull(),
+  updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  uniqueIndex("attendance_employee_schedule_employee_unique").on(table.employeeId),
+  index("attendance_employee_schedule_branch_idx").on(table.branchId),
+]);
+
+export const attendanceImportExceptions = mysqlTable("attendanceImportExceptions", {
+  id: int("id").autoincrement().primaryKey(),
+  branchId: int("branchId").notNull().references(() => branches.id, { onDelete: "cascade" }),
+  employeeId: int("employeeId").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  workDate: date("workDate").notNull(),
+  treatment: mysqlEnum("treatment", ["approved_normal", "approved_alternative", "hourly_review", "overtime_review", "unapproved_shortfall", "exclude_from_analysis"]).notNull(),
+  operationalStatus: mysqlEnum("operationalStatus", ["resolved", "pending_review", "excluded"]).notNull(),
+  shiftStart: time("shiftStart"),
+  shiftEnd: time("shiftEnd"),
+  breakMinutes: int("breakMinutes"),
+  graceMinutes: int("graceMinutes"),
+  decisionNote: text("decisionNote"),
+  decidedByUserId: int("decidedByUserId").references(() => users.id, { onDelete: "set null" }),
+  decidedAt: timestamp("decidedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [
+  uniqueIndex("attendance_import_exception_employee_date_unique").on(table.employeeId, table.workDate),
+  index("attendance_import_exception_branch_date_idx").on(table.branchId, table.workDate),
+  index("attendance_import_exception_branch_status_idx").on(table.branchId, table.operationalStatus),
+]);
 
 export const deliveryOrders = mysqlTable("deliveryOrders", {
   id: int("id").autoincrement().primaryKey(),

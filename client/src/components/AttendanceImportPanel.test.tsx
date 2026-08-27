@@ -10,6 +10,8 @@ vi.mock("@/lib/attendance-import", async () => {
   return { ...actual, downloadAttendanceImportTemplate: vi.fn(), exportAttendanceImportErrorRows: vi.fn() };
 });
 
+vi.mock("./AttendanceImportAnalysisPanel", () => ({ AttendanceImportAnalysisPanel: () => <div data-testid="analysis-panel" /> }));
+
 afterEach(cleanup);
 
 describe("AttendanceImportPanel", () => {

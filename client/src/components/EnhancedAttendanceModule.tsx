@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { downloadExcelWorkbook, mapAttendanceReportToExcelRows } from "@/lib/excel-export";
 import { parseAttendanceFile, type AttendanceImportDraft, type AttendanceImportProgress } from "@/lib/attendance-import";
+import { defaultAttendanceImportAnalysisSettings, type AttendanceImportAnalysisSettings } from "@/lib/attendance-import-analysis";
 import { trpc } from "@/lib/trpc";
 import { CalendarCheck2, CheckCircle2, Clock3, FileDown, Sparkles } from "lucide-react";
 import React, { useMemo, useState } from "react";
@@ -37,6 +38,7 @@ export function EnhancedAttendanceModule({ activeBranchId = 0, setActiveBranchId
   const [draft, setDraft] = useState<AttendanceImportDraft | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importProgress, setImportProgress] = useState<AttendanceImportProgress | null>(null);
+  const [analysisSettings, setAnalysisSettings] = useState<AttendanceImportAnalysisSettings | undefined>();
   const [reportFrom, setReportFrom] = useState(() => toInputDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [reportTo, setReportTo] = useState(() => toInputDate(new Date()));
   const hasEmployeeProfile = Boolean(profileQuery.data?.employee);
@@ -61,6 +63,7 @@ export function EnhancedAttendanceModule({ activeBranchId = 0, setActiveBranchId
   const readFile = async (file?: File) => {
     if (!file) return;
     setDraft(null);
+    setAnalysisSettings(undefined);
     setImportError(null);
     setImportProgress({ phase: "reading", value: 5, message: `تم اختيار «${file.name}». جارٍ بدء القراءة…` });
     try {
@@ -75,15 +78,22 @@ export function EnhancedAttendanceModule({ activeBranchId = 0, setActiveBranchId
     }
   };
 
-  const applyDraft = () => {
+  const applyDraft = (submittedSettings?: AttendanceImportAnalysisSettings) => {
     if (!draft) return;
+    const settings = submittedSettings ?? analysisSettings ?? defaultAttendanceImportAnalysisSettings;
     importRecords.mutate({
       branchId: activeBranchId,
       sourceFileName: draft.sourceFileName,
       sourceFormat: draft.sourceFormat,
       replaceExisting: false,
       confirmApply: true,
-      rows: draft.rows.filter(row => !row.issues.length && row.workDate).map(row => ({ employeeCode: row.employeeCode, workDate: row.workDate!, checkInAt: row.checkInAt, checkOutAt: row.checkOutAt, status: row.status })),
+      rows: draft.rows.filter(row => !row.issues.length && row.workDate).map(row => {
+        const employeeCode = row.employeeCode.trim().toUpperCase();
+        const exception = settings.exceptions?.[row.rowNumber];
+        const baseSchedule = settings.employeeSchedules?.[employeeCode] ?? { shiftStart: settings.shiftStart, shiftEnd: settings.shiftEnd, breakMinutes: settings.breakMinutes, graceMinutes: settings.graceMinutes };
+        const schedule = exception?.treatment === "approved_alternative" ? { shiftStart: exception.alternativeShiftStart ?? baseSchedule.shiftStart, shiftEnd: exception.alternativeShiftEnd ?? baseSchedule.shiftEnd, breakMinutes: exception.alternativeBreakMinutes ?? baseSchedule.breakMinutes, graceMinutes: exception.alternativeGraceMinutes ?? baseSchedule.graceMinutes } : baseSchedule;
+        return { employeeCode, workDate: row.workDate!, checkInAt: row.checkInAt, checkOutAt: row.checkOutAt, status: row.status, calculation: { treatment: exception?.treatment ?? "scheduled", schedule: exception?.treatment === "exclude_from_analysis" ? undefined : schedule, note: exception?.note } };
+      }),
     });
   };
 
@@ -99,7 +109,7 @@ export function EnhancedAttendanceModule({ activeBranchId = 0, setActiveBranchId
     return <section className="space-y-6"><Header /><Card className="border-[#f2d5d5] bg-white"><CardContent className="p-6"><Badge className="border-0 bg-[#fff1f1] text-[#b42318] hover:bg-[#fff1f1]">يلزم ربط الملف الوظيفي</Badge><h3 className="mt-3 text-lg font-extrabold text-[#17344a]">لا يوجد ملف موظف مرتبط بحسابك</h3><p className="mt-2 text-sm leading-7 text-slate-500">لن يتم إرسال طلبات حضور حتى يكتمل الربط.</p>{owner ? <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end"><label className="block w-full max-w-sm"><span className="text-xs font-bold text-slate-600">فرع ملفك الوظيفي</span><select value={setupBranchId || ""} onChange={event => setSetupBranchId(Number(event.target.value))} className="mt-1 h-10 w-full rounded-xl border border-[#d7e6df] bg-white px-3 text-sm text-[#17344a] outline-none focus:ring-2 focus:ring-[#0f766e]"><option value="" disabled>اختر الفرع</option>{(branchesQuery.data ?? []).map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}</select></label><Button disabled={!setupBranchId || setupProfile.isPending} onClick={() => setupProfile.mutate({ branchId: setupBranchId })}>{setupProfile.isPending ? "جارٍ الربط…" : "إنشاء وربط ملفي الوظيفي"}</Button></div> : <p className="mt-4 text-sm font-bold text-[#b42318]">تواصل مع مالك النظام لربط حسابك بملف موظف قائم.</p>}</CardContent></Card></section>;
   }
 
-  return <section className="space-y-6"><Header />{hasEmployeeProfile ? <Card className="border-[#e1ece6] bg-white"><CardContent className="p-6"><div className="flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-center"><div><p className="text-sm font-extrabold text-[#17344a]">سجل اليوم</p><p className="mt-1 text-xs text-slate-500">يتم حساب التأخير وساعات العمل آلياً من توقيت التسجيل.</p></div>{record?.checkOutAt ? <Badge className="bg-[#e6f5ef] text-[#0f766e] hover:bg-[#e6f5ef]">اكتملت وردية اليوم</Badge> : record?.checkInAt ? <Badge className="bg-[#fff3db] text-[#b87516] hover:bg-[#fff3db]">في وردية نشطة</Badge> : <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-100">لم يُسجّل حضور</Badge>}</div><div className="mt-6 grid gap-3 sm:grid-cols-3"><Metric label="وقت الحضور" value={formatTime(record?.checkInAt)} /><Metric label="وقت الانصراف" value={formatTime(record?.checkOutAt)} /><Metric label="التأخير" value={`${record?.lateMinutes ?? 0} دقيقة`} /></div><div className="mt-6 flex flex-wrap gap-3"><Button disabled={Boolean(record?.checkInAt) || checkIn.isPending} onClick={() => checkIn.mutate()} className="bg-[#0f766e] hover:bg-[#0b5c56]">{checkIn.isPending ? "جارٍ التسجيل…" : "تسجيل الحضور"}</Button><Button variant="outline" disabled={!record?.checkInAt || Boolean(record?.checkOutAt) || checkOut.isPending} onClick={() => checkOut.mutate()} className="border-[#b9d8ca] text-[#0f766e] hover:bg-[#eaf4ef] hover:text-[#0f766e]">{checkOut.isPending ? "جارٍ التسجيل…" : "تسجيل الانصراف"}</Button></div></CardContent></Card> : null}{manager ? <><BranchPicker branches={branchesQuery.data ?? []} value={activeBranchId} onChange={setActiveBranchId} /><section className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]"><AttendanceImportPanel activeBranchId={activeBranchId} draft={draft} error={importError} progress={importProgress} applying={importRecords.isPending} onSelectFile={readFile} onUpdateDraft={setDraft} onApply={applyDraft} /><ImportHistory /></section><AttendanceReport /></> : null}</section>;
+  return <section className="space-y-6"><Header />{hasEmployeeProfile ? <Card className="border-[#e1ece6] bg-white"><CardContent className="p-6"><div className="flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-center"><div><p className="text-sm font-extrabold text-[#17344a]">سجل اليوم</p><p className="mt-1 text-xs text-slate-500">يتم حساب التأخير وساعات العمل آلياً من توقيت التسجيل.</p></div>{record?.checkOutAt ? <Badge className="bg-[#e6f5ef] text-[#0f766e] hover:bg-[#e6f5ef]">اكتملت وردية اليوم</Badge> : record?.checkInAt ? <Badge className="bg-[#fff3db] text-[#b87516] hover:bg-[#fff3db]">في وردية نشطة</Badge> : <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-100">لم يُسجّل حضور</Badge>}</div><div className="mt-6 grid gap-3 sm:grid-cols-3"><Metric label="وقت الحضور" value={formatTime(record?.checkInAt)} /><Metric label="وقت الانصراف" value={formatTime(record?.checkOutAt)} /><Metric label="التأخير" value={`${record?.lateMinutes ?? 0} دقيقة`} /></div><div className="mt-6 flex flex-wrap gap-3"><Button disabled={Boolean(record?.checkInAt) || checkIn.isPending} onClick={() => checkIn.mutate()} className="bg-[#0f766e] hover:bg-[#0b5c56]">{checkIn.isPending ? "جارٍ التسجيل…" : "تسجيل الحضور"}</Button><Button variant="outline" disabled={!record?.checkInAt || Boolean(record?.checkOutAt) || checkOut.isPending} onClick={() => checkOut.mutate()} className="border-[#b9d8ca] text-[#0f766e] hover:bg-[#eaf4ef] hover:text-[#0f766e]">{checkOut.isPending ? "جارٍ التسجيل…" : "تسجيل الانصراف"}</Button></div></CardContent></Card> : null}{manager ? <><BranchPicker branches={branchesQuery.data ?? []} value={activeBranchId} onChange={setActiveBranchId} /><section className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]"><AttendanceImportPanel activeBranchId={activeBranchId} draft={draft} error={importError} progress={importProgress} applying={importRecords.isPending} onSelectFile={readFile} onUpdateDraft={setDraft} onApply={applyDraft} analysisSettings={analysisSettings} onAnalysisSettingsChange={setAnalysisSettings} /><ImportHistory /></section><AttendanceReport /></> : null}</section>;
 
   function Header() { return <div className="rounded-[1.75rem] border border-[#dce9e2] bg-white p-5 shadow-[0_18px_42px_-34px_rgba(23,52,74,.45)] sm:p-6"><Badge className="border-0 bg-[#e6f5ef] text-[#0f766e] hover:bg-[#e6f5ef]">سجل اليوم</Badge><h2 className="mt-3 text-2xl font-extrabold tracking-tight text-[#17344a]">الحضور والانصراف</h2><p className="mt-2 text-sm leading-7 text-slate-500">سجّل وقت الدخول والخروج، واستورد سجلات البصمة لمراجعتها قبل الاعتماد.</p></div>; }
   function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl bg-[#f8fbf9] p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-2 font-extrabold text-[#17344a]">{value}</p></div>; }
