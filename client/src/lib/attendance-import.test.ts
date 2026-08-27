@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeAttendanceImportFile, getAttendanceImportSelectionMessage, parseAttendanceRows, validateAttendanceImportFile } from "./attendance-import";
+import { describeAttendanceImportFile, getAttendanceImportRowEdit, getAttendanceImportSelectionMessage, parseAttendanceRows, reviseAttendanceImportRow, validateAttendanceImportFile } from "./attendance-import";
 
 function fileMetadata(name: string, size: number): Pick<File, "name" | "size"> {
   return { name, size };
@@ -51,6 +51,20 @@ describe("attendance import parser", () => {
     expect(draft.rows[0]?.workDate?.toISOString().slice(0, 10)).toBe("2026-07-01");
     expect(draft.rows[1]).toMatchObject({ rowNumber: 3, employeeCode: "13", issues: ["missing_time_pair"] });
     expect(draft.rows[2]).toMatchObject({ rowNumber: 5, employeeCode: "20", issues: [] });
+  });
+
+  it("revalidates a corrected preview row immediately before any server approval", () => {
+    const draft = parseAttendanceRows("attendance.xlsx", "xlsx", [
+      ["كود الموظف", "تاريخ العمل", "وقت الحضور", "وقت الانصراف"],
+      ["13", "2026-07-08", "11:44", ""],
+    ]);
+    const invalidRow = draft.rows[0]!;
+
+    const corrected = reviseAttendanceImportRow(invalidRow, { ...getAttendanceImportRowEdit(invalidRow), checkOutTime: "18:00" });
+
+    expect(invalidRow.issues).toEqual(["missing_time_pair"]);
+    expect(corrected).toMatchObject({ employeeCode: "13", status: "present", issues: [] });
+    expect(corrected.checkOutAt?.getHours()).toBe(18);
   });
 
   it("confirms the selected file name and size before parsing begins", () => {
