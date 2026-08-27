@@ -53,7 +53,7 @@ describe("AttendanceImportPanel", () => {
     ] }} />);
 
     fireEvent.change(screen.getByLabelText("البحث في معاينة الحضور"), { target: { value: "EMP-200" } });
-    expect(screen.getByText("EMP-200")).toBeTruthy();
+    expect(screen.getAllByText("EMP-200").length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText("البحث في معاينة الحضور"), { target: { value: "" } });
     fireEvent.click(screen.getByLabelText("تحديد كل المتعثرة"));
     fireEvent.click(screen.getByRole("button", { name: "حذف المحدد (1)" }));

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AttendanceImportAnalysisPanel } from "@/components/AttendanceImportAnalysisPanel";
 import { downloadAttendanceImportTemplate, exportAttendanceImportErrorRows, getAttendanceImportRowEdit, issueLabel, reviseAttendanceImportRow, type AttendanceImportDraft, type AttendanceImportProgress, type AttendanceImportRowEdit } from "@/lib/attendance-import";
 import { CheckCircle2, FileDown, FileSpreadsheet, Loader2, Search, ShieldCheck, Trash2, TriangleAlert, Upload, XCircle } from "lucide-react";
 import React, { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
@@ -133,6 +134,7 @@ export function AttendanceImportPanel({ activeBranchId, draft, error, progress, 
           })}</tbody></table></div>
           {draft.rows.length > 50 ? <p className="mt-2 text-xs text-slate-500">تظهر أول 50 صفاً من المعاينة؛ يضم التصدير جميع صفوف المراجعة، ولا يُعتمد إلا الصف السليم بعد تحقق الخادم النهائي.</p> : null}
         </div> : null}
+        {draft ? <div className="mt-4"><AttendanceImportAnalysisPanel draft={draft} /></div> : null}
         <AlertDialog open={confirmApplyOpen} onOpenChange={setConfirmApplyOpen}><AlertDialogContent dir="rtl" className="border-[#cce3d8] bg-white text-right"><AlertDialogHeader><AlertDialogTitle className="text-[#17344a]">تأكيد اعتماد بيانات الحضور</AlertDialogTitle><AlertDialogDescription className="leading-7">سيُرسل الاعتماد النهائي للصفوف السليمة فقط. لا تُرسل صفوف المراجعة أو الصفوف التي حذفتها من المعاينة.</AlertDialogDescription></AlertDialogHeader><div className="grid grid-cols-3 gap-2 rounded-xl bg-[#f5faf7] p-3 text-center"><DialogStat label="الإجمالي" value={draft?.rows.length ?? 0} /><DialogStat label="سيُعتمد" value={validRows.length} tone="good" /><DialogStat label="متروك للمراجعة" value={invalidRows.length} tone="alert" /></div><AlertDialogFooter><AlertDialogCancel>رجوع للمراجعة</AlertDialogCancel><AlertDialogAction onClick={onApply} disabled={applying || !validRows.length} className="bg-[#0f766e] hover:bg-[#0b5c56]">{applying ? "جارٍ الاعتماد…" : "تأكيد اعتماد الصفوف السليمة"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       </CardContent>
     </Card>
