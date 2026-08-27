@@ -36,6 +36,23 @@ describe("attendance import parser", () => {
     expect(draft.issues).toEqual(expect.arrayContaining(["لم يتم العثور على عمود كود الموظف.", "لم يتم العثور على عمود تاريخ العمل."]));
   });
 
+  it("parses grouped fingerprint-device exports with employee headers repeated through the sheet", () => {
+    const draft = parseAttendanceRows("حضوروانصرافشهر7.xlsx", "xlsx", [
+      ["صيدلي", "الوظيفة", "", "البطاقة", "SARA", "الإسم", 13, "الكود", "تأخير/زيادة", "ساعات العمل", "الانصراف", "الحضور"],
+      ["", "-2:07", "5:52", "", "", new Date("2026-07-01T18:06:55"), new Date("2026-07-01T12:14:21"), 352],
+      ["", "", "", "", "", "", new Date("2026-07-08T11:44:55")],
+      ["مساعد", "الوظيفة", "", "البطاقة", "د/ ريهام", "الإسم", 20, "الكود", "تأخير/زيادة", "ساعات العمل", "الانصراف", "الحضور"],
+      ["", "-1:52", "6:08", "", "", new Date("2026-07-03T18:34:56"), new Date("2026-07-03T12:26:56"), 368],
+    ]);
+
+    expect(draft.detectedLayout).toBe("device_report");
+    expect(draft.rows).toHaveLength(3);
+    expect(draft.rows[0]).toMatchObject({ rowNumber: 2, employeeCode: "13", issues: [] });
+    expect(draft.rows[0]?.workDate?.toISOString().slice(0, 10)).toBe("2026-07-01");
+    expect(draft.rows[1]).toMatchObject({ rowNumber: 3, employeeCode: "13", issues: ["missing_time_pair"] });
+    expect(draft.rows[2]).toMatchObject({ rowNumber: 5, employeeCode: "20", issues: [] });
+  });
+
   it("confirms the selected file name and size before parsing begins", () => {
     expect(describeAttendanceImportFile(fileMetadata("حضور-أغسطس.xlsx", 1536))).toEqual({
       name: "حضور-أغسطس.xlsx",

@@ -10,6 +10,7 @@ import { PayrollEnhancements } from "@/components/PayrollEnhancements";
 import { PayrollReadinessCenter } from "@/components/PayrollReadinessCenter";
 import { KpiOperationsCenter } from "@/components/KpiOperationsCenter";
 import { AttendanceDashboard } from "@/components/AttendanceInsights";
+import { EnhancedAttendanceModule } from "@/components/EnhancedAttendanceModule";
 import { BranchForm } from "@/components/BranchForm";
 import { ArchiveEmployeeDialog } from "@/components/ArchiveEmployeeDialog";
 import { trpc } from "@/lib/trpc";
@@ -21,6 +22,8 @@ import { toast } from "sonner";
 import { Archive, CalendarCheck2, CheckCircle2, CircleAlert, ClipboardList, Clock3, FileBarChart2, FileDown, HandCoins, Loader2, Pencil, Plus, ReceiptText, Upload, UsersRound, ShieldCheck, Sparkles } from "lucide-react";
 
 type Module = "employees" | "attendance" | "shifts" | "leaves" | "kpis" | "payroll";
+
+export const AttendanceModule = EnhancedAttendanceModule;
 
 const content: Record<Module, { eyebrow: string; title: string; description: string; action: string; icon: typeof UsersRound }> = {
   employees: { eyebrow: "فريق الصيدلية", title: "ملفات الموظفين", description: "أنشئ ملفات الفريق واربط كل موظف بالفرع والدور الوظيفي المناسب.", action: "إضافة موظف", icon: UsersRound },
@@ -212,7 +215,7 @@ export function EmployeesModule({ activeBranchId, setActiveBranchId }: { activeB
   </div>;
 }
 
-export function AttendanceModule({ activeBranchId = 0, setActiveBranchId = () => undefined }: { activeBranchId?: number; setActiveBranchId?: (value: number) => void }) {
+function LegacyAttendanceModule({ activeBranchId = 0, setActiveBranchId = () => undefined }: { activeBranchId?: number; setActiveBranchId?: (value: number) => void }) {
   const { user } = useAuth();
   const manager = isManagerRole(user?.role);
   const profileQuery = trpc.profile.mine.useQuery();
@@ -353,7 +356,7 @@ export default function ModulePage({ module }: { module: Module }) {
   const resolvedBranchId = useMemo(() => activeBranchId || profile.data?.employee?.branchId || branches.data?.[0]?.id || 0, [activeBranchId, profile.data?.employee?.branchId, branches.data]);
   useEffect(() => { if (!activeBranchId && resolvedBranchId) setActiveBranchId(resolvedBranchId); }, [activeBranchId, resolvedBranchId]);
   if (module === "employees") return <EmployeesModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} />;
-  if (module === "attendance") return <><AttendanceModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} /><AttendanceDashboard activeBranchId={resolvedBranchId} /></>;
+  if (module === "attendance") return <><EnhancedAttendanceModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} /><AttendanceDashboard activeBranchId={resolvedBranchId} /></>;
   if (module === "shifts") return <ShiftsModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} />;
   if (module === "leaves") return <LeavesModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} />;
   if (module === "kpis") return <KpisModule activeBranchId={resolvedBranchId} setActiveBranchId={setActiveBranchId} />;
