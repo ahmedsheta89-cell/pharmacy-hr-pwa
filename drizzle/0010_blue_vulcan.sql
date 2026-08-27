@@ -1,0 +1,1 @@
+ALTER TABLE `attendancePolicies` ADD `analysisBreakMinutes` int DEFAULT 0 NOT NULL;

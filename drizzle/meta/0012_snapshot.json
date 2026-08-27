@@ -1,0 +1,5723 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "id": "c832269a-d121-468d-a73a-4c69b532fba2",
+  "prevId": "19b7feba-66ac-49cd-b9e0-a514c426aebb",
+  "tables": {
+    "accountLinkLogs": {
+      "name": "accountLinkLogs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "enum('linked','unlinked')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "enum('owner_direct','owner_approved_request','owner_self_setup')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requestId": {
+          "name": "requestId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "actorUserId": {
+          "name": "actorUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "actorName": {
+          "name": "actorName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "accountLinkLogs_employee_created_idx": {
+          "name": "accountLinkLogs_employee_created_idx",
+          "columns": [
+            "employeeId",
+            "createdAt"
+          ],
+          "isUnique": false
+        },
+        "accountLinkLogs_user_created_idx": {
+          "name": "accountLinkLogs_user_created_idx",
+          "columns": [
+            "userId",
+            "createdAt"
+          ],
+          "isUnique": false
+        },
+        "accountLinkLogs_branch_created_idx": {
+          "name": "accountLinkLogs_branch_created_idx",
+          "columns": [
+            "branchId",
+            "createdAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "accountLinkLogs_employeeId_employees_id_fk": {
+          "name": "accountLinkLogs_employeeId_employees_id_fk",
+          "tableFrom": "accountLinkLogs",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "accountLinkLogs_userId_users_id_fk": {
+          "name": "accountLinkLogs_userId_users_id_fk",
+          "tableFrom": "accountLinkLogs",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "accountLinkLogs_branchId_branches_id_fk": {
+          "name": "accountLinkLogs_branchId_branches_id_fk",
+          "tableFrom": "accountLinkLogs",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "accountLinkLogs_requestId_accountLinkRequests_id_fk": {
+          "name": "accountLinkLogs_requestId_accountLinkRequests_id_fk",
+          "tableFrom": "accountLinkLogs",
+          "tableTo": "accountLinkRequests",
+          "columnsFrom": [
+            "requestId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "accountLinkLogs_actorUserId_users_id_fk": {
+          "name": "accountLinkLogs_actorUserId_users_id_fk",
+          "tableFrom": "accountLinkLogs",
+          "tableTo": "users",
+          "columnsFrom": [
+            "actorUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "accountLinkLogs_id": {
+          "name": "accountLinkLogs_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "accountLinkRequests": {
+      "name": "accountLinkRequests",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requestedByUserId": {
+          "name": "requestedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requestedByName": {
+          "name": "requestedByName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('pending','approved','rejected','cancelled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "reviewedByUserId": {
+          "name": "reviewedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedByName": {
+          "name": "reviewedByName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewNote": {
+          "name": "reviewNote",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedAt": {
+          "name": "reviewedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "accountLinkRequests_status_created_idx": {
+          "name": "accountLinkRequests_status_created_idx",
+          "columns": [
+            "status",
+            "createdAt"
+          ],
+          "isUnique": false
+        },
+        "accountLinkRequests_branch_status_idx": {
+          "name": "accountLinkRequests_branch_status_idx",
+          "columns": [
+            "branchId",
+            "status"
+          ],
+          "isUnique": false
+        },
+        "accountLinkRequests_employee_status_idx": {
+          "name": "accountLinkRequests_employee_status_idx",
+          "columns": [
+            "employeeId",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "accountLinkRequests_employeeId_employees_id_fk": {
+          "name": "accountLinkRequests_employeeId_employees_id_fk",
+          "tableFrom": "accountLinkRequests",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "accountLinkRequests_userId_users_id_fk": {
+          "name": "accountLinkRequests_userId_users_id_fk",
+          "tableFrom": "accountLinkRequests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "accountLinkRequests_branchId_branches_id_fk": {
+          "name": "accountLinkRequests_branchId_branches_id_fk",
+          "tableFrom": "accountLinkRequests",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "accountLinkRequests_requestedByUserId_users_id_fk": {
+          "name": "accountLinkRequests_requestedByUserId_users_id_fk",
+          "tableFrom": "accountLinkRequests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "requestedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "accountLinkRequests_reviewedByUserId_users_id_fk": {
+          "name": "accountLinkRequests_reviewedByUserId_users_id_fk",
+          "tableFrom": "accountLinkRequests",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "accountLinkRequests_id": {
+          "name": "accountLinkRequests_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "attendanceEmployeeSchedules": {
+      "name": "attendanceEmployeeSchedules",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "shiftStart": {
+          "name": "shiftStart",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "shiftEnd": {
+          "name": "shiftEnd",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "breakMinutes": {
+          "name": "breakMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "graceMinutes": {
+          "name": "graceMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 15
+        },
+        "updatedByUserId": {
+          "name": "updatedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "attendance_employee_schedule_employee_unique": {
+          "name": "attendance_employee_schedule_employee_unique",
+          "columns": [
+            "employeeId"
+          ],
+          "isUnique": true
+        },
+        "attendance_employee_schedule_branch_idx": {
+          "name": "attendance_employee_schedule_branch_idx",
+          "columns": [
+            "branchId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendanceEmployeeSchedules_branchId_branches_id_fk": {
+          "name": "attendanceEmployeeSchedules_branchId_branches_id_fk",
+          "tableFrom": "attendanceEmployeeSchedules",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "attendanceEmployeeSchedules_employeeId_employees_id_fk": {
+          "name": "attendanceEmployeeSchedules_employeeId_employees_id_fk",
+          "tableFrom": "attendanceEmployeeSchedules",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "attendanceEmployeeSchedules_updatedByUserId_users_id_fk": {
+          "name": "attendanceEmployeeSchedules_updatedByUserId_users_id_fk",
+          "tableFrom": "attendanceEmployeeSchedules",
+          "tableTo": "users",
+          "columnsFrom": [
+            "updatedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "attendanceEmployeeSchedules_id": {
+          "name": "attendanceEmployeeSchedules_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "attendanceImportBatches": {
+      "name": "attendanceImportBatches",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sourceFileName": {
+          "name": "sourceFileName",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sourceFormat": {
+          "name": "sourceFormat",
+          "type": "enum('xlsx','csv')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "periodStart": {
+          "name": "periodStart",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "periodEnd": {
+          "name": "periodEnd",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','applied','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "totalRows": {
+          "name": "totalRows",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "acceptedRows": {
+          "name": "acceptedRows",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "rejectedRows": {
+          "name": "rejectedRows",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "issueSummary": {
+          "name": "issueSummary",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "importedByUserId": {
+          "name": "importedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "appliedAt": {
+          "name": "appliedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "attendance_import_batch_branch_period_idx": {
+          "name": "attendance_import_batch_branch_period_idx",
+          "columns": [
+            "branchId",
+            "periodStart",
+            "periodEnd"
+          ],
+          "isUnique": false
+        },
+        "attendance_import_batch_status_idx": {
+          "name": "attendance_import_batch_status_idx",
+          "columns": [
+            "status",
+            "createdAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendanceImportBatches_branchId_branches_id_fk": {
+          "name": "attendanceImportBatches_branchId_branches_id_fk",
+          "tableFrom": "attendanceImportBatches",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "attendanceImportBatches_importedByUserId_users_id_fk": {
+          "name": "attendanceImportBatches_importedByUserId_users_id_fk",
+          "tableFrom": "attendanceImportBatches",
+          "tableTo": "users",
+          "columnsFrom": [
+            "importedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "attendanceImportBatches_id": {
+          "name": "attendanceImportBatches_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "attendanceImportExceptions": {
+      "name": "attendanceImportExceptions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workDate": {
+          "name": "workDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "treatment": {
+          "name": "treatment",
+          "type": "enum('approved_normal','approved_alternative','hourly_review','overtime_review','unapproved_shortfall','exclude_from_analysis')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "operationalStatus": {
+          "name": "operationalStatus",
+          "type": "enum('resolved','pending_review','excluded')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "shiftStart": {
+          "name": "shiftStart",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "shiftEnd": {
+          "name": "shiftEnd",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "breakMinutes": {
+          "name": "breakMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "graceMinutes": {
+          "name": "graceMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "decisionNote": {
+          "name": "decisionNote",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "decidedByUserId": {
+          "name": "decidedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "decidedAt": {
+          "name": "decidedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "attendance_import_exception_employee_date_unique": {
+          "name": "attendance_import_exception_employee_date_unique",
+          "columns": [
+            "employeeId",
+            "workDate"
+          ],
+          "isUnique": true
+        },
+        "attendance_import_exception_branch_date_idx": {
+          "name": "attendance_import_exception_branch_date_idx",
+          "columns": [
+            "branchId",
+            "workDate"
+          ],
+          "isUnique": false
+        },
+        "attendance_import_exception_branch_status_idx": {
+          "name": "attendance_import_exception_branch_status_idx",
+          "columns": [
+            "branchId",
+            "operationalStatus"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendanceImportExceptions_branchId_branches_id_fk": {
+          "name": "attendanceImportExceptions_branchId_branches_id_fk",
+          "tableFrom": "attendanceImportExceptions",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "attendanceImportExceptions_employeeId_employees_id_fk": {
+          "name": "attendanceImportExceptions_employeeId_employees_id_fk",
+          "tableFrom": "attendanceImportExceptions",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "attendanceImportExceptions_decidedByUserId_users_id_fk": {
+          "name": "attendanceImportExceptions_decidedByUserId_users_id_fk",
+          "tableFrom": "attendanceImportExceptions",
+          "tableTo": "users",
+          "columnsFrom": [
+            "decidedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "attendanceImportExceptions_id": {
+          "name": "attendanceImportExceptions_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "attendanceImportRows": {
+      "name": "attendanceImportRows",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "batchId": {
+          "name": "batchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "employeeCode": {
+          "name": "employeeCode",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workDate": {
+          "name": "workDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checkInAt": {
+          "name": "checkInAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checkOutAt": {
+          "name": "checkOutAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "workedMinutes": {
+          "name": "workedMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "lateMinutes": {
+          "name": "lateMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "earlyLeaveMinutes": {
+          "name": "earlyLeaveMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "overtimeMinutes": {
+          "name": "overtimeMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('valid','invalid','applied','skipped')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issueCodes": {
+          "name": "issueCodes",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "attendance_import_rows_batch_idx": {
+          "name": "attendance_import_rows_batch_idx",
+          "columns": [
+            "batchId",
+            "status"
+          ],
+          "isUnique": false
+        },
+        "attendance_import_rows_employee_date_idx": {
+          "name": "attendance_import_rows_employee_date_idx",
+          "columns": [
+            "employeeId",
+            "workDate"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendanceImportRows_batchId_attendanceImportBatches_id_fk": {
+          "name": "attendanceImportRows_batchId_attendanceImportBatches_id_fk",
+          "tableFrom": "attendanceImportRows",
+          "tableTo": "attendanceImportBatches",
+          "columnsFrom": [
+            "batchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "attendanceImportRows_employeeId_employees_id_fk": {
+          "name": "attendanceImportRows_employeeId_employees_id_fk",
+          "tableFrom": "attendanceImportRows",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "attendanceImportRows_id": {
+          "name": "attendanceImportRows_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "attendancePolicies": {
+      "name": "attendancePolicies",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "graceMinutes": {
+          "name": "graceMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 15
+        },
+        "analysisShiftStart": {
+          "name": "analysisShiftStart",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'09:00:00'"
+        },
+        "analysisShiftEnd": {
+          "name": "analysisShiftEnd",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'17:00:00'"
+        },
+        "analysisBreakMinutes": {
+          "name": "analysisBreakMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "analysisTargetScore": {
+          "name": "analysisTargetScore",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 90
+        },
+        "lateMultiplier": {
+          "name": "lateMultiplier",
+          "type": "decimal(4,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'1.00'"
+        },
+        "monthlyLateMinuteCap": {
+          "name": "monthlyLateMinuteCap",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pointsPerLateOccurrence": {
+          "name": "pointsPerLateOccurrence",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "enum('yes','no')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'yes'"
+        },
+        "updatedByUserId": {
+          "name": "updatedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "attendance_policy_branch_unique": {
+          "name": "attendance_policy_branch_unique",
+          "columns": [
+            "branchId"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "attendancePolicies_branchId_branches_id_fk": {
+          "name": "attendancePolicies_branchId_branches_id_fk",
+          "tableFrom": "attendancePolicies",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "attendancePolicies_updatedByUserId_users_id_fk": {
+          "name": "attendancePolicies_updatedByUserId_users_id_fk",
+          "tableFrom": "attendancePolicies",
+          "tableTo": "users",
+          "columnsFrom": [
+            "updatedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "attendancePolicies_id": {
+          "name": "attendancePolicies_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "attendanceRecords": {
+      "name": "attendanceRecords",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "shiftAssignmentId": {
+          "name": "shiftAssignmentId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "importBatchId": {
+          "name": "importBatchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "workDate": {
+          "name": "workDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "checkInAt": {
+          "name": "checkInAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checkOutAt": {
+          "name": "checkOutAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checkInLatitude": {
+          "name": "checkInLatitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checkInLongitude": {
+          "name": "checkInLongitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checkOutLatitude": {
+          "name": "checkOutLatitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checkOutLongitude": {
+          "name": "checkOutLongitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checkInPhotoUrl": {
+          "name": "checkInPhotoUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "scheduledMinutes": {
+          "name": "scheduledMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "workedMinutes": {
+          "name": "workedMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "lateMinutes": {
+          "name": "lateMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "earlyLeaveMinutes": {
+          "name": "earlyLeaveMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "overtimeMinutes": {
+          "name": "overtimeMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('present','late','absent','excused')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'present'"
+        },
+        "source": {
+          "name": "source",
+          "type": "enum('self_service','import','manual')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'self_service'"
+        },
+        "analysisTreatment": {
+          "name": "analysisTreatment",
+          "type": "enum('scheduled','approved_normal','approved_alternative','hourly_review','overtime_review','unapproved_shortfall','exclude_from_analysis')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'scheduled'"
+        },
+        "analysisSchedule": {
+          "name": "analysisSchedule",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "attendance_employee_date_unique": {
+          "name": "attendance_employee_date_unique",
+          "columns": [
+            "employeeId",
+            "workDate"
+          ],
+          "isUnique": true
+        },
+        "attendance_date_idx": {
+          "name": "attendance_date_idx",
+          "columns": [
+            "workDate"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendanceRecords_employeeId_employees_id_fk": {
+          "name": "attendanceRecords_employeeId_employees_id_fk",
+          "tableFrom": "attendanceRecords",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "attendanceRecords_shiftAssignmentId_shiftAssignments_id_fk": {
+          "name": "attendanceRecords_shiftAssignmentId_shiftAssignments_id_fk",
+          "tableFrom": "attendanceRecords",
+          "tableTo": "shiftAssignments",
+          "columnsFrom": [
+            "shiftAssignmentId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "attendanceRecords_importBatchId_attendanceImportBatches_id_fk": {
+          "name": "attendanceRecords_importBatchId_attendanceImportBatches_id_fk",
+          "tableFrom": "attendanceRecords",
+          "tableTo": "attendanceImportBatches",
+          "columnsFrom": [
+            "importBatchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "attendanceRecords_id": {
+          "name": "attendanceRecords_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "attendanceRules": {
+      "name": "attendanceRules",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "metric": {
+          "name": "metric",
+          "type": "enum('late_minutes','late_occurrences','absence_days','early_leave_minutes','overtime_minutes')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "threshold": {
+          "name": "threshold",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "direction": {
+          "name": "direction",
+          "type": "enum('at_least','at_most')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'at_least'"
+        },
+        "adjustmentType": {
+          "name": "adjustmentType",
+          "type": "enum('reward','penalty')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amountMode": {
+          "name": "amountMode",
+          "type": "enum('fixed','per_unit','daily_rate_percentage')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "maximumAmount": {
+          "name": "maximumAmount",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "requiresApproval": {
+          "name": "requiresApproval",
+          "type": "enum('yes','no')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'yes'"
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "enum('yes','no')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'yes'"
+        },
+        "effectiveFrom": {
+          "name": "effectiveFrom",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effectiveTo": {
+          "name": "effectiveTo",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "attendance_rules_branch_active_idx": {
+          "name": "attendance_rules_branch_active_idx",
+          "columns": [
+            "branchId",
+            "isActive"
+          ],
+          "isUnique": false
+        },
+        "attendance_rules_branch_metric_idx": {
+          "name": "attendance_rules_branch_metric_idx",
+          "columns": [
+            "branchId",
+            "metric"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "attendanceRules_branchId_branches_id_fk": {
+          "name": "attendanceRules_branchId_branches_id_fk",
+          "tableFrom": "attendanceRules",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "attendanceRules_createdByUserId_users_id_fk": {
+          "name": "attendanceRules_createdByUserId_users_id_fk",
+          "tableFrom": "attendanceRules",
+          "tableTo": "users",
+          "columnsFrom": [
+            "createdByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "attendanceRules_id": {
+          "name": "attendanceRules_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "branches": {
+      "name": "branches",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "geofenceRadiusMeters": {
+          "name": "geofenceRadiusMeters",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 80
+        },
+        "managerEmployeeId": {
+          "name": "managerEmployeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "enum('yes','no')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'yes'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "branches_code_unique": {
+          "name": "branches_code_unique",
+          "columns": [
+            "code"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "branches_id": {
+          "name": "branches_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "chatConversations": {
+      "name": "chatConversations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "publicToken": {
+          "name": "publicToken",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "customerName": {
+          "name": "customerName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "customerPhone": {
+          "name": "customerPhone",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subject": {
+          "name": "subject",
+          "type": "varchar(220)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('open','pending','closed')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'open'"
+        },
+        "assignedUserId": {
+          "name": "assignedUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "lastMessageAt": {
+          "name": "lastMessageAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "chat_conversations_public_token_unique": {
+          "name": "chat_conversations_public_token_unique",
+          "columns": [
+            "publicToken"
+          ],
+          "isUnique": true
+        },
+        "chat_conversations_status_time_idx": {
+          "name": "chat_conversations_status_time_idx",
+          "columns": [
+            "status",
+            "lastMessageAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "chatConversations_branchId_branches_id_fk": {
+          "name": "chatConversations_branchId_branches_id_fk",
+          "tableFrom": "chatConversations",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "chatConversations_assignedUserId_users_id_fk": {
+          "name": "chatConversations_assignedUserId_users_id_fk",
+          "tableFrom": "chatConversations",
+          "tableTo": "users",
+          "columnsFrom": [
+            "assignedUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "chatConversations_id": {
+          "name": "chatConversations_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "chatMessages": {
+      "name": "chatMessages",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "conversationId": {
+          "name": "conversationId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sender": {
+          "name": "sender",
+          "type": "enum('customer','agent','system')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "authorUserId": {
+          "name": "authorUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "readAt": {
+          "name": "readAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "chat_messages_conversation_time_idx": {
+          "name": "chat_messages_conversation_time_idx",
+          "columns": [
+            "conversationId",
+            "createdAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "chatMessages_conversationId_chatConversations_id_fk": {
+          "name": "chatMessages_conversationId_chatConversations_id_fk",
+          "tableFrom": "chatMessages",
+          "tableTo": "chatConversations",
+          "columnsFrom": [
+            "conversationId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "chatMessages_authorUserId_users_id_fk": {
+          "name": "chatMessages_authorUserId_users_id_fk",
+          "tableFrom": "chatMessages",
+          "tableTo": "users",
+          "columnsFrom": [
+            "authorUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "chatMessages_id": {
+          "name": "chatMessages_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "customerContactLogs": {
+      "name": "customerContactLogs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "conversationId": {
+          "name": "conversationId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "customerPhone": {
+          "name": "customerPhone",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "channel": {
+          "name": "channel",
+          "type": "enum('whatsapp_link')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actorUserId": {
+          "name": "actorUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "contact_logs_phone_time_idx": {
+          "name": "contact_logs_phone_time_idx",
+          "columns": [
+            "customerPhone",
+            "createdAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "customerContactLogs_branchId_branches_id_fk": {
+          "name": "customerContactLogs_branchId_branches_id_fk",
+          "tableFrom": "customerContactLogs",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "customerContactLogs_conversationId_chatConversations_id_fk": {
+          "name": "customerContactLogs_conversationId_chatConversations_id_fk",
+          "tableFrom": "customerContactLogs",
+          "tableTo": "chatConversations",
+          "columnsFrom": [
+            "conversationId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "customerContactLogs_actorUserId_users_id_fk": {
+          "name": "customerContactLogs_actorUserId_users_id_fk",
+          "tableFrom": "customerContactLogs",
+          "tableTo": "users",
+          "columnsFrom": [
+            "actorUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "customerContactLogs_id": {
+          "name": "customerContactLogs_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "deliveryEvents": {
+      "name": "deliveryEvents",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "deliveryOrderId": {
+          "name": "deliveryOrderId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actorEmployeeId": {
+          "name": "actorEmployeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "enum('created','assigned','picked_up','en_route','delivered','failed','returned','cancelled','note')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "accuracyMeters": {
+          "name": "accuracyMeters",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "occurredAt": {
+          "name": "occurredAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "delivery_events_order_time_idx": {
+          "name": "delivery_events_order_time_idx",
+          "columns": [
+            "deliveryOrderId",
+            "occurredAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "deliveryEvents_deliveryOrderId_deliveryOrders_id_fk": {
+          "name": "deliveryEvents_deliveryOrderId_deliveryOrders_id_fk",
+          "tableFrom": "deliveryEvents",
+          "tableTo": "deliveryOrders",
+          "columnsFrom": [
+            "deliveryOrderId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "deliveryEvents_actorEmployeeId_employees_id_fk": {
+          "name": "deliveryEvents_actorEmployeeId_employees_id_fk",
+          "tableFrom": "deliveryEvents",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "actorEmployeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "deliveryEvents_id": {
+          "name": "deliveryEvents_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "deliveryLocationPings": {
+      "name": "deliveryLocationPings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "deliveryOrderId": {
+          "name": "deliveryOrderId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "latitude": {
+          "name": "latitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "longitude": {
+          "name": "longitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "accuracyMeters": {
+          "name": "accuracyMeters",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "capturedAt": {
+          "name": "capturedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "delivery_pings_order_time_idx": {
+          "name": "delivery_pings_order_time_idx",
+          "columns": [
+            "deliveryOrderId",
+            "capturedAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "deliveryLocationPings_deliveryOrderId_deliveryOrders_id_fk": {
+          "name": "deliveryLocationPings_deliveryOrderId_deliveryOrders_id_fk",
+          "tableFrom": "deliveryLocationPings",
+          "tableTo": "deliveryOrders",
+          "columnsFrom": [
+            "deliveryOrderId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "deliveryLocationPings_employeeId_employees_id_fk": {
+          "name": "deliveryLocationPings_employeeId_employees_id_fk",
+          "tableFrom": "deliveryLocationPings",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "deliveryLocationPings_id": {
+          "name": "deliveryLocationPings_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "deliveryOrders": {
+      "name": "deliveryOrders",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "deliveryZoneId": {
+          "name": "deliveryZoneId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "requestedByOrderStaffId": {
+          "name": "requestedByOrderStaffId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdByOrderAccountId": {
+          "name": "createdByOrderAccountId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "orderCode": {
+          "name": "orderCode",
+          "type": "varchar(48)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "customerName": {
+          "name": "customerName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "customerPhone": {
+          "name": "customerPhone",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "itemName": {
+          "name": "itemName",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "itemCode": {
+          "name": "itemCode",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "destinationLatitude": {
+          "name": "destinationLatitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "destinationLongitude": {
+          "name": "destinationLongitude",
+          "type": "decimal(10,7)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "promisedAt": {
+          "name": "promisedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "slaDueAt": {
+          "name": "slaDueAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "slaAlertedAt": {
+          "name": "slaAlertedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "contactedAt": {
+          "name": "contactedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "preparedAt": {
+          "name": "preparedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cancelledAt": {
+          "name": "cancelledAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','contacted','prepared','ready','assigned','picked_up','en_route','delivered','failed','returned','cancelled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "assignedEmployeeId": {
+          "name": "assignedEmployeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pickedUpAt": {
+          "name": "pickedUpAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deliveredAt": {
+          "name": "deliveredAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "proofNote": {
+          "name": "proofNote",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "exceptionReason": {
+          "name": "exceptionReason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "delivery_orders_branch_code_unique": {
+          "name": "delivery_orders_branch_code_unique",
+          "columns": [
+            "branchId",
+            "orderCode"
+          ],
+          "isUnique": true
+        },
+        "delivery_orders_branch_status_idx": {
+          "name": "delivery_orders_branch_status_idx",
+          "columns": [
+            "branchId",
+            "status"
+          ],
+          "isUnique": false
+        },
+        "delivery_orders_employee_status_idx": {
+          "name": "delivery_orders_employee_status_idx",
+          "columns": [
+            "assignedEmployeeId",
+            "status"
+          ],
+          "isUnique": false
+        },
+        "delivery_orders_sla_due_idx": {
+          "name": "delivery_orders_sla_due_idx",
+          "columns": [
+            "branchId",
+            "slaDueAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "deliveryOrders_branchId_branches_id_fk": {
+          "name": "deliveryOrders_branchId_branches_id_fk",
+          "tableFrom": "deliveryOrders",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "deliveryOrders_deliveryZoneId_deliveryZones_id_fk": {
+          "name": "deliveryOrders_deliveryZoneId_deliveryZones_id_fk",
+          "tableFrom": "deliveryOrders",
+          "tableTo": "deliveryZones",
+          "columnsFrom": [
+            "deliveryZoneId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "deliveryOrders_requestedByOrderStaffId_orderPortalStaff_id_fk": {
+          "name": "deliveryOrders_requestedByOrderStaffId_orderPortalStaff_id_fk",
+          "tableFrom": "deliveryOrders",
+          "tableTo": "orderPortalStaff",
+          "columnsFrom": [
+            "requestedByOrderStaffId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "deliveryOrders_createdByOrderAccountId_orderPortalAccounts_id_fk": {
+          "name": "deliveryOrders_createdByOrderAccountId_orderPortalAccounts_id_fk",
+          "tableFrom": "deliveryOrders",
+          "tableTo": "orderPortalAccounts",
+          "columnsFrom": [
+            "createdByOrderAccountId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "deliveryOrders_assignedEmployeeId_employees_id_fk": {
+          "name": "deliveryOrders_assignedEmployeeId_employees_id_fk",
+          "tableFrom": "deliveryOrders",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "assignedEmployeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "deliveryOrders_createdByUserId_users_id_fk": {
+          "name": "deliveryOrders_createdByUserId_users_id_fk",
+          "tableFrom": "deliveryOrders",
+          "tableTo": "users",
+          "columnsFrom": [
+            "createdByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "deliveryOrders_id": {
+          "name": "deliveryOrders_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "deliveryProofImages": {
+      "name": "deliveryProofImages",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "deliveryOrderId": {
+          "name": "deliveryOrderId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "storageKey": {
+          "name": "storageKey",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "mimeType": {
+          "name": "mimeType",
+          "type": "varchar(96)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "caption": {
+          "name": "caption",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "uploadedByEmployeeId": {
+          "name": "uploadedByEmployeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "delivery_proof_order_time_idx": {
+          "name": "delivery_proof_order_time_idx",
+          "columns": [
+            "deliveryOrderId",
+            "createdAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "deliveryProofImages_deliveryOrderId_deliveryOrders_id_fk": {
+          "name": "deliveryProofImages_deliveryOrderId_deliveryOrders_id_fk",
+          "tableFrom": "deliveryProofImages",
+          "tableTo": "deliveryOrders",
+          "columnsFrom": [
+            "deliveryOrderId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "deliveryProofImages_uploadedByEmployeeId_employees_id_fk": {
+          "name": "deliveryProofImages_uploadedByEmployeeId_employees_id_fk",
+          "tableFrom": "deliveryProofImages",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "uploadedByEmployeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "deliveryProofImages_id": {
+          "name": "deliveryProofImages_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "deliveryZones": {
+      "name": "deliveryZones",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "slaMinutes": {
+          "name": "slaMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 60
+        },
+        "slaWarningMinutes": {
+          "name": "slaWarningMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 10
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "enum('yes','no')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'yes'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "delivery_zone_branch_name_unique": {
+          "name": "delivery_zone_branch_name_unique",
+          "columns": [
+            "branchId",
+            "name"
+          ],
+          "isUnique": true
+        },
+        "delivery_zone_branch_active_idx": {
+          "name": "delivery_zone_branch_active_idx",
+          "columns": [
+            "branchId",
+            "isActive"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "deliveryZones_branchId_branches_id_fk": {
+          "name": "deliveryZones_branchId_branches_id_fk",
+          "tableFrom": "deliveryZones",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "deliveryZones_id": {
+          "name": "deliveryZones_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "employeeAuditLogs": {
+      "name": "employeeAuditLogs",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actorUserId": {
+          "name": "actorUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "actorName": {
+          "name": "actorName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "enum('created','updated','archived','restored')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "changes": {
+          "name": "changes",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "employeeAuditLogs_employee_created_idx": {
+          "name": "employeeAuditLogs_employee_created_idx",
+          "columns": [
+            "employeeId",
+            "createdAt"
+          ],
+          "isUnique": false
+        },
+        "employeeAuditLogs_branch_created_idx": {
+          "name": "employeeAuditLogs_branch_created_idx",
+          "columns": [
+            "branchId",
+            "createdAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "employeeAuditLogs_employeeId_employees_id_fk": {
+          "name": "employeeAuditLogs_employeeId_employees_id_fk",
+          "tableFrom": "employeeAuditLogs",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "employeeAuditLogs_branchId_branches_id_fk": {
+          "name": "employeeAuditLogs_branchId_branches_id_fk",
+          "tableFrom": "employeeAuditLogs",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "employeeAuditLogs_actorUserId_users_id_fk": {
+          "name": "employeeAuditLogs_actorUserId_users_id_fk",
+          "tableFrom": "employeeAuditLogs",
+          "tableTo": "users",
+          "columnsFrom": [
+            "actorUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "employeeAuditLogs_id": {
+          "name": "employeeAuditLogs_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "employeeCertificates": {
+      "name": "employeeCertificates",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "issuer": {
+          "name": "issuer",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "issuedOn": {
+          "name": "issuedOn",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "expiresOn": {
+          "name": "expiresOn",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "documentUrl": {
+          "name": "documentUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "employeeCertificates_employeeId_employees_id_fk": {
+          "name": "employeeCertificates_employeeId_employees_id_fk",
+          "tableFrom": "employeeCertificates",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "employeeCertificates_id": {
+          "name": "employeeCertificates_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "employees": {
+      "name": "employees",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "employeeCode": {
+          "name": "employeeCode",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fullName": {
+          "name": "fullName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "phone": {
+          "name": "phone",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nationalId": {
+          "name": "nationalId",
+          "type": "varchar(48)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(320)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "jobTitle": {
+          "name": "jobTitle",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "enum('user','admin','owner','manager','hr_manager','pharmacist','employee')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'employee'"
+        },
+        "hireDate": {
+          "name": "hireDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "birthDate": {
+          "name": "birthDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "emergencyContactName": {
+          "name": "emergencyContactName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "emergencyContactPhone": {
+          "name": "emergencyContactPhone",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "profilePhotoUrl": {
+          "name": "profilePhotoUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "employmentStatus": {
+          "name": "employmentStatus",
+          "type": "enum('active','inactive','on_leave')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "employees_employeeCode_unique": {
+          "name": "employees_employeeCode_unique",
+          "columns": [
+            "employeeCode"
+          ],
+          "isUnique": true
+        },
+        "employees_userId_unique": {
+          "name": "employees_userId_unique",
+          "columns": [
+            "userId"
+          ],
+          "isUnique": true
+        },
+        "employees_branch_idx": {
+          "name": "employees_branch_idx",
+          "columns": [
+            "branchId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "employees_userId_users_id_fk": {
+          "name": "employees_userId_users_id_fk",
+          "tableFrom": "employees",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "employees_branchId_branches_id_fk": {
+          "name": "employees_branchId_branches_id_fk",
+          "tableFrom": "employees",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "employees_id": {
+          "name": "employees_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "faqEntries": {
+      "name": "faqEntries",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "question": {
+          "name": "question",
+          "type": "varchar(300)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "answer": {
+          "name": "answer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sortOrder": {
+          "name": "sortOrder",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "enum('yes','no')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'yes'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "faq_branch_active_idx": {
+          "name": "faq_branch_active_idx",
+          "columns": [
+            "branchId",
+            "isActive"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "faqEntries_branchId_branches_id_fk": {
+          "name": "faqEntries_branchId_branches_id_fk",
+          "tableFrom": "faqEntries",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "faqEntries_id": {
+          "name": "faqEntries_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "kpiDefinitions": {
+      "name": "kpiDefinitions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ownerEmployeeId": {
+          "name": "ownerEmployeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "enum('sales','operations','service','attendance')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "unit": {
+          "name": "unit",
+          "type": "enum('currency','number','percentage','minutes')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "direction": {
+          "name": "direction",
+          "type": "enum('higher_better','lower_better')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'higher_better'"
+        },
+        "targetValue": {
+          "name": "targetValue",
+          "type": "decimal(14,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "weight": {
+          "name": "weight",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'1.00'"
+        },
+        "measurementPeriod": {
+          "name": "measurementPeriod",
+          "type": "enum('daily','weekly','monthly')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'monthly'"
+        },
+        "applicableRoles": {
+          "name": "applicableRoles",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "enum('yes','no')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'yes'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "kpiDefinitions_branchId_branches_id_fk": {
+          "name": "kpiDefinitions_branchId_branches_id_fk",
+          "tableFrom": "kpiDefinitions",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "kpiDefinitions_ownerEmployeeId_employees_id_fk": {
+          "name": "kpiDefinitions_ownerEmployeeId_employees_id_fk",
+          "tableFrom": "kpiDefinitions",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "ownerEmployeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "kpiDefinitions_id": {
+          "name": "kpiDefinitions_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "kpiRecords": {
+      "name": "kpiRecords",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kpiDefinitionId": {
+          "name": "kpiDefinitionId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "periodStart": {
+          "name": "periodStart",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "periodEnd": {
+          "name": "periodEnd",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actualValue": {
+          "name": "actualValue",
+          "type": "decimal(14,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "targetValue": {
+          "name": "targetValue",
+          "type": "decimal(14,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "achievementPercentage": {
+          "name": "achievementPercentage",
+          "type": "decimal(6,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "score": {
+          "name": "score",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recordedByEmployeeId": {
+          "name": "recordedByEmployeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "kpi_record_employee_definition_period_unique": {
+          "name": "kpi_record_employee_definition_period_unique",
+          "columns": [
+            "employeeId",
+            "kpiDefinitionId",
+            "periodStart",
+            "periodEnd"
+          ],
+          "isUnique": true
+        },
+        "kpi_records_employee_period_idx": {
+          "name": "kpi_records_employee_period_idx",
+          "columns": [
+            "employeeId",
+            "periodStart"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "kpiRecords_employeeId_employees_id_fk": {
+          "name": "kpiRecords_employeeId_employees_id_fk",
+          "tableFrom": "kpiRecords",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "kpiRecords_kpiDefinitionId_kpiDefinitions_id_fk": {
+          "name": "kpiRecords_kpiDefinitionId_kpiDefinitions_id_fk",
+          "tableFrom": "kpiRecords",
+          "tableTo": "kpiDefinitions",
+          "columnsFrom": [
+            "kpiDefinitionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "kpiRecords_recordedByEmployeeId_employees_id_fk": {
+          "name": "kpiRecords_recordedByEmployeeId_employees_id_fk",
+          "tableFrom": "kpiRecords",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "recordedByEmployeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "kpiRecords_id": {
+          "name": "kpiRecords_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "leaveBalances": {
+      "name": "leaveBalances",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "year": {
+          "name": "year",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "annualEntitlement": {
+          "name": "annualEntitlement",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'21.00'"
+        },
+        "sickEntitlement": {
+          "name": "sickEntitlement",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "annualUsed": {
+          "name": "annualUsed",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "sickUsed": {
+          "name": "sickUsed",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "leave_balance_employee_year_unique": {
+          "name": "leave_balance_employee_year_unique",
+          "columns": [
+            "employeeId",
+            "year"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "leaveBalances_employeeId_employees_id_fk": {
+          "name": "leaveBalances_employeeId_employees_id_fk",
+          "tableFrom": "leaveBalances",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "leaveBalances_id": {
+          "name": "leaveBalances_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "leaveRequests": {
+      "name": "leaveRequests",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "leaveType": {
+          "name": "leaveType",
+          "type": "enum('annual','sick','emergency','unpaid')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "startDate": {
+          "name": "startDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "endDate": {
+          "name": "endDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "totalDays": {
+          "name": "totalDays",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('pending','approved','rejected','cancelled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "reviewedByEmployeeId": {
+          "name": "reviewedByEmployeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedAt": {
+          "name": "reviewedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewerNote": {
+          "name": "reviewerNote",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "leave_requests_employee_status_idx": {
+          "name": "leave_requests_employee_status_idx",
+          "columns": [
+            "employeeId",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "leaveRequests_employeeId_employees_id_fk": {
+          "name": "leaveRequests_employeeId_employees_id_fk",
+          "tableFrom": "leaveRequests",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "leaveRequests_reviewedByEmployeeId_employees_id_fk": {
+          "name": "leaveRequests_reviewedByEmployeeId_employees_id_fk",
+          "tableFrom": "leaveRequests",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "reviewedByEmployeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "leaveRequests_id": {
+          "name": "leaveRequests_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "notifications": {
+      "name": "notifications",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "data": {
+          "name": "data",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "readAt": {
+          "name": "readAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "notifications_user_read_idx": {
+          "name": "notifications_user_read_idx",
+          "columns": [
+            "userId",
+            "readAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "notifications_userId_users_id_fk": {
+          "name": "notifications_userId_users_id_fk",
+          "tableFrom": "notifications",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "notifications_id": {
+          "name": "notifications_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "orderPortalAccounts": {
+      "name": "orderPortalAccounts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "phoneUsername": {
+          "name": "phoneUsername",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "passwordHash": {
+          "name": "passwordHash",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sessionVersion": {
+          "name": "sessionVersion",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "failedAttempts": {
+          "name": "failedAttempts",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "lockedUntil": {
+          "name": "lockedUntil",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "lastSignedInAt": {
+          "name": "lastSignedInAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "enum('yes','no')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'yes'"
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "order_portal_phone_unique": {
+          "name": "order_portal_phone_unique",
+          "columns": [
+            "phoneUsername"
+          ],
+          "isUnique": true
+        },
+        "order_portal_branch_active_idx": {
+          "name": "order_portal_branch_active_idx",
+          "columns": [
+            "branchId",
+            "isActive"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "orderPortalAccounts_branchId_branches_id_fk": {
+          "name": "orderPortalAccounts_branchId_branches_id_fk",
+          "tableFrom": "orderPortalAccounts",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "orderPortalAccounts_createdByUserId_users_id_fk": {
+          "name": "orderPortalAccounts_createdByUserId_users_id_fk",
+          "tableFrom": "orderPortalAccounts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "createdByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "orderPortalAccounts_id": {
+          "name": "orderPortalAccounts_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "orderPortalStaff": {
+      "name": "orderPortalStaff",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fullName": {
+          "name": "fullName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "phone": {
+          "name": "phone",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "enum('yes','no')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'yes'"
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "order_portal_staff_branch_name_unique": {
+          "name": "order_portal_staff_branch_name_unique",
+          "columns": [
+            "branchId",
+            "fullName"
+          ],
+          "isUnique": true
+        },
+        "order_portal_staff_branch_active_idx": {
+          "name": "order_portal_staff_branch_active_idx",
+          "columns": [
+            "branchId",
+            "isActive"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "orderPortalStaff_branchId_branches_id_fk": {
+          "name": "orderPortalStaff_branchId_branches_id_fk",
+          "tableFrom": "orderPortalStaff",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "orderPortalStaff_createdByUserId_users_id_fk": {
+          "name": "orderPortalStaff_createdByUserId_users_id_fk",
+          "tableFrom": "orderPortalStaff",
+          "tableTo": "users",
+          "columnsFrom": [
+            "createdByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "orderPortalStaff_id": {
+          "name": "orderPortalStaff_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "payrollAdjustments": {
+      "name": "payrollAdjustments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "payrollRunId": {
+          "name": "payrollRunId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "attendanceRuleId": {
+          "name": "attendanceRuleId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "adjustmentType": {
+          "name": "adjustmentType",
+          "type": "enum('reward','penalty')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "enum('automatic_rule','manual')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('pending','approved','rejected','applied')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "amount": {
+          "name": "amount",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "metricValue": {
+          "name": "metricValue",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "occurrenceDate": {
+          "name": "occurrenceDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requestedByUserId": {
+          "name": "requestedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedByUserId": {
+          "name": "reviewedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedAt": {
+          "name": "reviewedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "appliedAt": {
+          "name": "appliedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "payroll_adjustments_employee_status_idx": {
+          "name": "payroll_adjustments_employee_status_idx",
+          "columns": [
+            "employeeId",
+            "status"
+          ],
+          "isUnique": false
+        },
+        "payroll_adjustments_branch_period_idx": {
+          "name": "payroll_adjustments_branch_period_idx",
+          "columns": [
+            "branchId",
+            "occurrenceDate"
+          ],
+          "isUnique": false
+        },
+        "payroll_adjustments_run_idx": {
+          "name": "payroll_adjustments_run_idx",
+          "columns": [
+            "payrollRunId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "payrollAdjustments_payrollRunId_payrollRuns_id_fk": {
+          "name": "payrollAdjustments_payrollRunId_payrollRuns_id_fk",
+          "tableFrom": "payrollAdjustments",
+          "tableTo": "payrollRuns",
+          "columnsFrom": [
+            "payrollRunId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "payrollAdjustments_branchId_branches_id_fk": {
+          "name": "payrollAdjustments_branchId_branches_id_fk",
+          "tableFrom": "payrollAdjustments",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "payrollAdjustments_employeeId_employees_id_fk": {
+          "name": "payrollAdjustments_employeeId_employees_id_fk",
+          "tableFrom": "payrollAdjustments",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "payrollAdjustments_attendanceRuleId_attendanceRules_id_fk": {
+          "name": "payrollAdjustments_attendanceRuleId_attendanceRules_id_fk",
+          "tableFrom": "payrollAdjustments",
+          "tableTo": "attendanceRules",
+          "columnsFrom": [
+            "attendanceRuleId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "payrollAdjustments_requestedByUserId_users_id_fk": {
+          "name": "payrollAdjustments_requestedByUserId_users_id_fk",
+          "tableFrom": "payrollAdjustments",
+          "tableTo": "users",
+          "columnsFrom": [
+            "requestedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "payrollAdjustments_reviewedByUserId_users_id_fk": {
+          "name": "payrollAdjustments_reviewedByUserId_users_id_fk",
+          "tableFrom": "payrollAdjustments",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "payrollAdjustments_id": {
+          "name": "payrollAdjustments_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "payrollApprovals": {
+      "name": "payrollApprovals",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "payrollRunId": {
+          "name": "payrollRunId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "approverEmployeeId": {
+          "name": "approverEmployeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "approvalStage": {
+          "name": "approvalStage",
+          "type": "enum('manager','hr_manager','owner_override')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "decision": {
+          "name": "decision",
+          "type": "enum('approved','rejected','returned')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "payrollApprovals_run_created_idx": {
+          "name": "payrollApprovals_run_created_idx",
+          "columns": [
+            "payrollRunId",
+            "createdAt"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "payrollApprovals_payrollRunId_payrollRuns_id_fk": {
+          "name": "payrollApprovals_payrollRunId_payrollRuns_id_fk",
+          "tableFrom": "payrollApprovals",
+          "tableTo": "payrollRuns",
+          "columnsFrom": [
+            "payrollRunId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "payrollApprovals_approverEmployeeId_employees_id_fk": {
+          "name": "payrollApprovals_approverEmployeeId_employees_id_fk",
+          "tableFrom": "payrollApprovals",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "approverEmployeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "payrollApprovals_id": {
+          "name": "payrollApprovals_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "payrollItems": {
+      "name": "payrollItems",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "payrollRunId": {
+          "name": "payrollRunId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "basicSalary": {
+          "name": "basicSalary",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "totalAllowances": {
+          "name": "totalAllowances",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "kpiScore": {
+          "name": "kpiScore",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "kpiBonus": {
+          "name": "kpiBonus",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "lateDeduction": {
+          "name": "lateDeduction",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "absenceDeduction": {
+          "name": "absenceDeduction",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "leaveDeduction": {
+          "name": "leaveDeduction",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "rewardsTotal": {
+          "name": "rewardsTotal",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "penaltiesTotal": {
+          "name": "penaltiesTotal",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "attendanceCompliancePercentage": {
+          "name": "attendanceCompliancePercentage",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "netSalary": {
+          "name": "netSalary",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "calculationSnapshot": {
+          "name": "calculationSnapshot",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "payroll_item_run_employee_unique": {
+          "name": "payroll_item_run_employee_unique",
+          "columns": [
+            "payrollRunId",
+            "employeeId"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "payrollItems_payrollRunId_payrollRuns_id_fk": {
+          "name": "payrollItems_payrollRunId_payrollRuns_id_fk",
+          "tableFrom": "payrollItems",
+          "tableTo": "payrollRuns",
+          "columnsFrom": [
+            "payrollRunId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "payrollItems_employeeId_employees_id_fk": {
+          "name": "payrollItems_employeeId_employees_id_fk",
+          "tableFrom": "payrollItems",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "payrollItems_id": {
+          "name": "payrollItems_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "payrollRuns": {
+      "name": "payrollRuns",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "year": {
+          "name": "year",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "month": {
+          "name": "month",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','pending_manager','pending_hr','approved','rejected','paid')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "approvedByEmployeeId": {
+          "name": "approvedByEmployeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "approvedAt": {
+          "name": "approvedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "payroll_run_branch_period_unique": {
+          "name": "payroll_run_branch_period_unique",
+          "columns": [
+            "branchId",
+            "year",
+            "month"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "payrollRuns_branchId_branches_id_fk": {
+          "name": "payrollRuns_branchId_branches_id_fk",
+          "tableFrom": "payrollRuns",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payrollRuns_approvedByEmployeeId_employees_id_fk": {
+          "name": "payrollRuns_approvedByEmployeeId_employees_id_fk",
+          "tableFrom": "payrollRuns",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "approvedByEmployeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "payrollRuns_id": {
+          "name": "payrollRuns_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "performanceReviews": {
+      "name": "performanceReviews",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reviewerEmployeeId": {
+          "name": "reviewerEmployeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "periodLabel": {
+          "name": "periodLabel",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "year": {
+          "name": "year",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "overallScore": {
+          "name": "overallScore",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kpiScore": {
+          "name": "kpiScore",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "behaviorScore": {
+          "name": "behaviorScore",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "developmentScore": {
+          "name": "developmentScore",
+          "type": "decimal(5,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "strengths": {
+          "name": "strengths",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "improvementAreas": {
+          "name": "improvementAreas",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nextGoals": {
+          "name": "nextGoals",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','submitted','acknowledged')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "performance_review_employee_period_unique": {
+          "name": "performance_review_employee_period_unique",
+          "columns": [
+            "employeeId",
+            "periodLabel",
+            "year"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "performanceReviews_employeeId_employees_id_fk": {
+          "name": "performanceReviews_employeeId_employees_id_fk",
+          "tableFrom": "performanceReviews",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "performanceReviews_reviewerEmployeeId_employees_id_fk": {
+          "name": "performanceReviews_reviewerEmployeeId_employees_id_fk",
+          "tableFrom": "performanceReviews",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "reviewerEmployeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "performanceReviews_id": {
+          "name": "performanceReviews_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "quickReplies": {
+      "name": "quickReplies",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "enum('yes','no')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'yes'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "quick_replies_branch_active_idx": {
+          "name": "quick_replies_branch_active_idx",
+          "columns": [
+            "branchId",
+            "isActive"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "quickReplies_branchId_branches_id_fk": {
+          "name": "quickReplies_branchId_branches_id_fk",
+          "tableFrom": "quickReplies",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "quickReplies_id": {
+          "name": "quickReplies_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "salaryStructures": {
+      "name": "salaryStructures",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "basicSalary": {
+          "name": "basicSalary",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "housingAllowance": {
+          "name": "housingAllowance",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "transportationAllowance": {
+          "name": "transportationAllowance",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "otherAllowances": {
+          "name": "otherAllowances",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "maximumKpiBonus": {
+          "name": "maximumKpiBonus",
+          "type": "decimal(12,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "lateDeductionPerMinute": {
+          "name": "lateDeductionPerMinute",
+          "type": "decimal(10,2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'0.00'"
+        },
+        "effectiveFrom": {
+          "name": "effectiveFrom",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effectiveTo": {
+          "name": "effectiveTo",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "salary_structure_employee_effective_idx": {
+          "name": "salary_structure_employee_effective_idx",
+          "columns": [
+            "employeeId",
+            "effectiveFrom"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "salaryStructures_employeeId_employees_id_fk": {
+          "name": "salaryStructures_employeeId_employees_id_fk",
+          "tableFrom": "salaryStructures",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "salaryStructures_id": {
+          "name": "salaryStructures_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "shiftAssignments": {
+      "name": "shiftAssignments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "employeeId": {
+          "name": "employeeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "shiftId": {
+          "name": "shiftId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workDate": {
+          "name": "workDate",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('scheduled','completed','cancelled','absent')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'scheduled'"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "shift_assignments_employee_date_unique": {
+          "name": "shift_assignments_employee_date_unique",
+          "columns": [
+            "employeeId",
+            "workDate"
+          ],
+          "isUnique": true
+        },
+        "shift_assignments_date_idx": {
+          "name": "shift_assignments_date_idx",
+          "columns": [
+            "workDate"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "shiftAssignments_employeeId_employees_id_fk": {
+          "name": "shiftAssignments_employeeId_employees_id_fk",
+          "tableFrom": "shiftAssignments",
+          "tableTo": "employees",
+          "columnsFrom": [
+            "employeeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "shiftAssignments_shiftId_shifts_id_fk": {
+          "name": "shiftAssignments_shiftId_shifts_id_fk",
+          "tableFrom": "shiftAssignments",
+          "tableTo": "shifts",
+          "columnsFrom": [
+            "shiftId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "shiftAssignments_id": {
+          "name": "shiftAssignments_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "shifts": {
+      "name": "shifts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "branchId": {
+          "name": "branchId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "startTime": {
+          "name": "startTime",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "endTime": {
+          "name": "endTime",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "graceMinutes": {
+          "name": "graceMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 10
+        },
+        "breakMinutes": {
+          "name": "breakMinutes",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "color": {
+          "name": "color",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'#13A68A'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "shifts_branchId_branches_id_fk": {
+          "name": "shifts_branchId_branches_id_fk",
+          "tableFrom": "shifts",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branchId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "shifts_id": {
+          "name": "shifts_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "users": {
+      "name": "users",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "openId": {
+          "name": "openId",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(320)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "loginMethod": {
+          "name": "loginMethod",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "enum('user','admin','owner','manager','hr_manager','pharmacist','employee')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'user'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        },
+        "lastSignedIn": {
+          "name": "lastSignedIn",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "users_id": {
+          "name": "users_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "users_openId_unique": {
+          "name": "users_openId_unique",
+          "columns": [
+            "openId"
+          ]
+        }
+      },
+      "checkConstraint": {}
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {},
+    "indexes": {}
+  }
+}

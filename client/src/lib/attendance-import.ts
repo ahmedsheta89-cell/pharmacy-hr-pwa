@@ -162,7 +162,6 @@ export function reviseAttendanceImportRow(row: AttendanceImportDraftRow, edit: A
   if (!employeeCode) issues.push("missing_employee_code");
   if (!workDate) issues.push("missing_work_date");
   if (status === "present" && Boolean(checkInAt) !== Boolean(checkOutAt)) issues.push("missing_time_pair");
-  if (checkInAt && checkOutAt && checkOutAt <= checkInAt) issues.push("invalid_time_order");
   return { ...row, employeeCode, workDate, checkInAt, checkOutAt, status, issues };
 }
 
@@ -213,7 +212,6 @@ function parseDeviceReportRows(sourceFileName: string, sourceFormat: "xlsx" | "c
     if (!employeeCode) rowIssues.push("employee_header_incomplete");
     if (!workDate) rowIssues.push("missing_work_date");
     if (Boolean(checkInAt) !== Boolean(checkOutAt)) rowIssues.push("missing_time_pair");
-    if (checkInAt && checkOutAt && checkOutAt <= checkInAt) rowIssues.push("invalid_time_order");
     rows.push({ rowNumber: index + 1, employeeCode, workDate, checkInAt, checkOutAt, status: "present", issues: rowIssues });
   });
 
@@ -251,7 +249,6 @@ export function parseAttendanceRows(sourceFileName: string, sourceFormat: "xlsx"
     if (!employeeCode) rowIssues.push("missing_employee_code");
     if (!workDate) rowIssues.push("missing_work_date");
     if (Boolean(checkInAt) !== Boolean(checkOutAt) && parsedStatus.status === "present") rowIssues.push("missing_time_pair");
-    if (checkInAt && checkOutAt && checkOutAt <= checkInAt) rowIssues.push("invalid_time_order");
     if (parsedStatus.invalid) rowIssues.push("invalid_status");
     return { rowNumber: index + 2, employeeCode, workDate, checkInAt, checkOutAt, status: parsedStatus.status, issues: rowIssues };
   }).filter(row => !row.issues.includes("empty_row"));

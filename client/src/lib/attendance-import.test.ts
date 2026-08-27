@@ -20,7 +20,7 @@ describe("attendance import parser", () => {
     expect(draft.rows[0]?.checkOutAt?.getHours()).toBe(17);
   });
 
-  it("flags incomplete and invalid punch times before any server import", () => {
+  it("flags incomplete punch pairs while preserving potential overnight shifts for later shift-aware analysis", () => {
     const draft = parseAttendanceRows("attendance.csv", "csv", [
       ["employee code", "date", "check in", "check out"],
       ["EMP-002", "2026-08-03", "10:00", ""],
@@ -28,7 +28,9 @@ describe("attendance import parser", () => {
     ]);
 
     expect(draft.rows[0]?.issues).toContain("missing_time_pair");
-    expect(draft.rows[1]?.issues).toContain("invalid_time_order");
+    expect(draft.rows[1]?.issues).toEqual([]);
+    expect(draft.rows[1]?.checkInAt?.getHours()).toBe(18);
+    expect(draft.rows[1]?.checkOutAt?.getHours()).toBe(17);
   });
 
   it("requires the employee code and work-date columns", () => {

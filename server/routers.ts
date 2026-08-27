@@ -8,6 +8,8 @@ import {
   accountLinkLogs,
   accountLinkRequests,
   attendanceImportBatches,
+  attendanceEmployeeSchedules,
+  attendanceImportExceptions,
   attendanceImportRows,
   attendanceRecords,
   attendancePolicies,
@@ -62,6 +64,19 @@ const employeeStatusValues = ["active", "inactive", "on_leave"] as const;
 const accountLinkRequestStatusValues = ["pending", "approved", "rejected", "cancelled"] as const;
 const deliveryStatusValues = ["draft", "contacted", "prepared", "ready", "assigned", "picked_up", "en_route", "delivered", "failed", "returned", "cancelled"] as const;
 const orderManagerStatusValues = ["draft", "contacted", "prepared", "ready", "cancelled"] as const;
+const attendanceExceptionTreatmentValues = ["approved_normal", "approved_alternative", "hourly_review", "overtime_review", "unapproved_shortfall", "exclude_from_analysis"] as const;
+const attendanceAnalysisTreatmentValues = ["scheduled", ...attendanceExceptionTreatmentValues] as const;
+const scheduleSnapshotSchema = z.object({
+  shiftStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  shiftEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  breakMinutes: z.number().int().min(0).max(480),
+  graceMinutes: z.number().int().min(0).max(240),
+}).refine(value => value.shiftStart !== value.shiftEnd, { message: "يجب أن تختلف بداية الوردية عن نهايتها." });
+const importRowCalculationSchema = z.object({
+  treatment: z.enum(attendanceAnalysisTreatmentValues),
+  schedule: scheduleSnapshotSchema.optional(),
+  note: z.string().trim().max(1000).optional(),
+}).refine(value => value.treatment === "exclude_from_analysis" || Boolean(value.schedule), { message: "يلزم تحديد أساس الوردية لمعالجة السجل." });
 const ORDER_PORTAL_COOKIE = "pharmacy_order_portal";
 const ORDER_PORTAL_SESSION_SECONDS = 12 * 60 * 60;
 const employeeFieldLabels: Record<string, string> = { employeeCode: "الكود الوظيفي", fullName: "الاسم", phone: "الهاتف", email: "البريد الإلكتروني", jobTitle: "المسمى الوظيفي", role: "الدور", hireDate: "تاريخ التعيين", nationalId: "الرقم القومي", employmentStatus: "حالة الملف" };
@@ -214,6 +229,20 @@ function scheduledMinutesForShift(workDate: Date, shift: { startTime: string | D
   const start = timeOnWorkDate(workDate, String(shift.startTime));
   const end = timeOnWorkDate(workDate, String(shift.endTime), String(shift.endTime) <= String(shift.startTime));
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000) - Math.max(shift.breakMinutes, 0));
+}
+
+function normalizeImportedCheckOut(checkInAt: Date | null, checkOutAt: Date | null, workDate: Date, schedule?: { shiftStart: string; shiftEnd: string }) {
+  if (!checkInAt || !checkOutAt || !schedule || schedule.shiftEnd > schedule.shiftStart || checkOutAt > checkInAt) return checkOutAt;
+  const normalized = new Date(checkOutAt);
+  normalized.setDate(normalized.getDate() + 1);
+  const scheduledEnd = timeOnWorkDate(workDate, schedule.shiftEnd, true);
+  return normalized <= new Date(scheduledEnd.getTime() + (8 * 60 * 60_000)) ? normalized : checkOutAt;
+}
+
+function exceptionOperationalStatus(treatment: (typeof attendanceExceptionTreatmentValues)[number]) {
+  if (treatment === "exclude_from_analysis") return "excluded" as const;
+  if (treatment === "approved_normal" || treatment === "approved_alternative") return "resolved" as const;
+  return "pending_review" as const;
 }
 
 function attendanceRuleMetricValue(metric: "late_minutes" | "late_occurrences" | "absence_days" | "early_leave_minutes" | "overtime_minutes", summary: { totalLateMinutes: number; absentDays: number; earlyLeaveMinutes: number; overtimeMinutes: number }, lateOccurrences: number) {
@@ -702,6 +731,33 @@ export const appRouter = router({
       const db = await requireDb();
       return db.select({ employee: employees, attendance: attendanceRecords }).from(employees).leftJoin(attendanceRecords, and(eq(employees.id, attendanceRecords.employeeId), eq(attendanceRecords.workDate, startOfDay()))).where(eq(employees.branchId, input.branchId)).orderBy(asc(employees.fullName));
     }),
+    importSchedules: managerProcedure.input(z.object({ branchId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      return db.select({ employeeCode: employees.employeeCode, schedule: attendanceEmployeeSchedules }).from(attendanceEmployeeSchedules).innerJoin(employees, eq(attendanceEmployeeSchedules.employeeId, employees.id)).where(eq(attendanceEmployeeSchedules.branchId, input.branchId)).orderBy(asc(employees.employeeCode));
+    }),
+    importExceptions: managerProcedure.input(z.object({ branchId: z.number().int().positive(), from: z.coerce.date(), to: z.coerce.date() }).refine(input => input.to >= input.from, { message: "نطاق التاريخ غير صالح." })).query(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      return db.select({ employeeCode: employees.employeeCode, exception: attendanceImportExceptions }).from(attendanceImportExceptions).innerJoin(employees, eq(attendanceImportExceptions.employeeId, employees.id)).where(and(eq(attendanceImportExceptions.branchId, input.branchId), gte(attendanceImportExceptions.workDate, startOfDay(input.from)), lte(attendanceImportExceptions.workDate, endOfDay(input.to)))).orderBy(asc(attendanceImportExceptions.workDate), asc(employees.employeeCode));
+    }),
+    saveImportSchedules: managerProcedure.input(z.object({ branchId: z.number().int().positive(), schedules: z.array(z.object({ employeeCode: z.string().trim().min(1).max(64), shiftStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), shiftEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), breakMinutes: z.number().int().min(0).max(480), graceMinutes: z.number().int().min(0).max(240) })).min(1).max(500) })).mutation(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      const branchEmployees = await db.select().from(employees).where(and(eq(employees.branchId, input.branchId), eq(employees.employmentStatus, "active")));
+      const employeeByCode = new Map(branchEmployees.map(employee => [employee.employeeCode.trim().toUpperCase(), employee]));
+      const seen = new Set<string>();
+      const values = input.schedules.flatMap(schedule => {
+        const code = schedule.employeeCode.trim().toUpperCase();
+        if (seen.has(code)) throw new TRPCError({ code: "BAD_REQUEST", message: "لا يمكن حفظ وردية مكررة للموظف نفسه." });
+        seen.add(code);
+        const employee = employeeByCode.get(code);
+        if (!employee) return [];
+        return [{ branchId: input.branchId, employeeId: employee.id, shiftStart: `${schedule.shiftStart}:00`, shiftEnd: `${schedule.shiftEnd}:00`, breakMinutes: schedule.breakMinutes, graceMinutes: schedule.graceMinutes, updatedByUserId: ctx.user.id }];
+      });
+      for (const value of values) await db.insert(attendanceEmployeeSchedules).values(value).onDuplicateKeyUpdate({ set: { shiftStart: value.shiftStart, shiftEnd: value.shiftEnd, breakMinutes: value.breakMinutes, graceMinutes: value.graceMinutes, updatedByUserId: ctx.user.id } });
+      return { success: true, saved: values.length, notFoundCodes: input.schedules.map(schedule => schedule.employeeCode.trim().toUpperCase()).filter(code => !employeeByCode.has(code)) };
+    }),
     importRecords: managerProcedure.input(z.object({
       branchId: z.number().int().positive(),
       sourceFileName: z.string().trim().min(1).max(255),
@@ -714,6 +770,7 @@ export const appRouter = router({
         checkInAt: z.coerce.date().optional(),
         checkOutAt: z.coerce.date().optional(),
         status: z.enum(["present", "absent", "excused"]).optional(),
+        calculation: importRowCalculationSchema.optional(),
       })).min(1).max(2000),
     })).mutation(async ({ ctx, input }) => {
       await assertBranchScope(ctx.user, input.branchId);
@@ -737,29 +794,46 @@ export const appRouter = router({
         seen.add(key);
         const employee = employeeByCode.get(employeeCode);
         if (!employee) issues.push("employee_not_found");
-        if (row.checkInAt && row.checkOutAt && row.checkOutAt <= row.checkInAt) issues.push("invalid_time_order");
         const requestedStatus = row.status ?? "present";
         if ((requestedStatus === "present" && (!row.checkInAt || !row.checkOutAt)) || ((requestedStatus === "absent" || requestedStatus === "excused") && (row.checkInAt || row.checkOutAt))) issues.push("incomplete_attendance_row");
         const existing = employee ? existingByEmployeeDate.get(`${employee.id}:${workDate.toISOString().slice(0, 10)}`) : undefined;
         if (existing && !input.replaceExisting) issues.push("existing_attendance_record");
         const assignment = employee ? assignmentByEmployeeDate.get(`${employee.id}:${workDate.toISOString().slice(0, 10)}`) : undefined;
-        const scheduledMinutes = assignment ? scheduledMinutesForShift(workDate, { startTime: String(assignment.shift.startTime), endTime: String(assignment.shift.endTime), breakMinutes: assignment.shift.breakMinutes }) : 0;
-        const workedMinutes = row.checkInAt && row.checkOutAt ? Math.max(0, Math.floor((row.checkOutAt.getTime() - row.checkInAt.getTime()) / 60_000) - (assignment?.shift.breakMinutes ?? 0)) : 0;
-        const lateMinutes = row.checkInAt && assignment ? lateMinutesFromSchedule(row.checkInAt, workDate, String(assignment.shift.startTime), assignment.shift.graceMinutes) : 0;
-        const scheduledEnd = assignment ? timeOnWorkDate(workDate, String(assignment.shift.endTime), String(assignment.shift.endTime) <= String(assignment.shift.startTime)) : null;
-        const earlyLeaveMinutes = row.checkOutAt && scheduledEnd ? Math.max(0, Math.floor((scheduledEnd.getTime() - row.checkOutAt.getTime()) / 60_000)) : 0;
-        const overtimeMinutes = scheduledMinutes ? Math.max(0, workedMinutes - scheduledMinutes) : 0;
+        const calculation = row.calculation;
+        const schedule = calculation?.schedule ?? (assignment ? { shiftStart: String(assignment.shift.startTime).slice(0, 5), shiftEnd: String(assignment.shift.endTime).slice(0, 5), breakMinutes: assignment.shift.breakMinutes, graceMinutes: assignment.shift.graceMinutes } : undefined);
+        const checkInAt = row.checkInAt ?? null;
+        const checkOutAt = normalizeImportedCheckOut(checkInAt, row.checkOutAt ?? null, workDate, schedule);
+        if (checkInAt && checkOutAt && checkOutAt <= checkInAt) issues.push("invalid_time_order");
+        const excluded = calculation?.treatment === "exclude_from_analysis";
+        let scheduledMinutes = schedule ? scheduledMinutesForShift(workDate, { startTime: schedule.shiftStart, endTime: schedule.shiftEnd, breakMinutes: schedule.breakMinutes }) : 0;
+        let workedMinutes = checkInAt && checkOutAt ? Math.max(0, Math.floor((checkOutAt.getTime() - checkInAt.getTime()) / 60_000) - (schedule?.breakMinutes ?? 0)) : 0;
+        let lateMinutes = checkInAt && schedule ? lateMinutesFromSchedule(checkInAt, workDate, schedule.shiftStart, schedule.graceMinutes) : 0;
+        const scheduledEnd = schedule ? timeOnWorkDate(workDate, schedule.shiftEnd, schedule.shiftEnd <= schedule.shiftStart) : null;
+        let earlyLeaveMinutes = checkOutAt && scheduledEnd ? Math.max(0, Math.floor((scheduledEnd.getTime() - checkOutAt.getTime()) / 60_000)) : 0;
+        let overtimeMinutes = checkOutAt && scheduledEnd ? Math.max(0, Math.floor((checkOutAt.getTime() - scheduledEnd.getTime()) / 60_000)) : 0;
+        if (calculation?.treatment === "approved_normal") { workedMinutes = scheduledMinutes; lateMinutes = 0; earlyLeaveMinutes = 0; overtimeMinutes = 0; }
+        if (calculation?.treatment === "hourly_review") { scheduledMinutes = 0; lateMinutes = 0; earlyLeaveMinutes = 0; overtimeMinutes = 0; }
         const status = requestedStatus === "present" ? (lateMinutes > 0 ? "late" as const : "present" as const) : requestedStatus;
-        return { employeeCode, employee, workDate, checkInAt: row.checkInAt ?? null, checkOutAt: row.checkOutAt ?? null, workedMinutes, lateMinutes, earlyLeaveMinutes, overtimeMinutes, status, issues, existing, assignment };
+        return { employeeCode, employee, workDate, checkInAt, checkOutAt, scheduledMinutes, workedMinutes, lateMinutes, earlyLeaveMinutes, overtimeMinutes, status, issues, existing, assignment, calculation, schedule, excluded };
       });
       const issueCounts = new Map<string, number>();
       prepared.forEach(row => row.issues.forEach(issue => issueCounts.set(issue, (issueCounts.get(issue) ?? 0) + 1)));
-      const accepted = prepared.filter(row => row.issues.length === 0);
-      const batchResult = await db.insert(attendanceImportBatches).values({ branchId: input.branchId, sourceFileName: input.sourceFileName, sourceFormat: input.sourceFormat, periodStart, periodEnd, status: accepted.length ? "applied" : "rejected", totalRows: prepared.length, acceptedRows: accepted.length, rejectedRows: prepared.length - accepted.length, issueSummary: Array.from(issueCounts, ([code, count]) => ({ code, count })), importedByUserId: ctx.user.id, appliedAt: accepted.length ? new Date() : null });
+      const processed = prepared.filter(row => row.issues.length === 0);
+      const accepted = processed.filter(row => !row.excluded);
+      const batchResult = await db.insert(attendanceImportBatches).values({ branchId: input.branchId, sourceFileName: input.sourceFileName, sourceFormat: input.sourceFormat, periodStart, periodEnd, status: processed.length ? "applied" : "rejected", totalRows: prepared.length, acceptedRows: accepted.length, rejectedRows: prepared.length - processed.length, issueSummary: Array.from(issueCounts, ([code, count]) => ({ code, count })), importedByUserId: ctx.user.id, appliedAt: processed.length ? new Date() : null });
       const batchId = Number(batchResult[0].insertId);
-      await db.insert(attendanceImportRows).values(prepared.map(row => ({ batchId, employeeId: row.employee?.id ?? null, employeeCode: row.employeeCode, workDate: row.workDate, checkInAt: row.checkInAt, checkOutAt: row.checkOutAt, workedMinutes: row.workedMinutes, lateMinutes: row.lateMinutes, earlyLeaveMinutes: row.earlyLeaveMinutes, overtimeMinutes: row.overtimeMinutes, status: (row.issues.length ? (row.issues.includes("existing_attendance_record") ? "skipped" : "invalid") : "applied") as "applied" | "skipped" | "invalid", issueCodes: row.issues })));
+      await db.insert(attendanceImportRows).values(prepared.map(row => ({ batchId, employeeId: row.employee?.id ?? null, employeeCode: row.employeeCode, workDate: row.workDate, checkInAt: row.checkInAt, checkOutAt: row.checkOutAt, workedMinutes: row.workedMinutes, lateMinutes: row.lateMinutes, earlyLeaveMinutes: row.earlyLeaveMinutes, overtimeMinutes: row.overtimeMinutes, status: (row.issues.length ? (row.issues.includes("existing_attendance_record") ? "skipped" : "invalid") : row.excluded ? "skipped" : "applied") as "applied" | "skipped" | "invalid", issueCodes: row.excluded ? ["excluded_from_analysis"] : row.issues })));
+      for (const row of processed.filter(row => row.calculation)) {
+        const calculation = row.calculation!;
+        if (calculation.treatment === "scheduled") {
+          await db.delete(attendanceImportExceptions).where(and(eq(attendanceImportExceptions.employeeId, row.employee!.id), eq(attendanceImportExceptions.workDate, row.workDate)));
+          continue;
+        }
+        await db.insert(attendanceImportExceptions).values({ branchId: input.branchId, employeeId: row.employee!.id, workDate: row.workDate, treatment: calculation.treatment as (typeof attendanceExceptionTreatmentValues)[number], operationalStatus: exceptionOperationalStatus(calculation.treatment as (typeof attendanceExceptionTreatmentValues)[number]), shiftStart: row.schedule ? `${row.schedule.shiftStart}:00` : null, shiftEnd: row.schedule ? `${row.schedule.shiftEnd}:00` : null, breakMinutes: row.schedule?.breakMinutes ?? null, graceMinutes: row.schedule?.graceMinutes ?? null, decisionNote: calculation.note ?? null, decidedByUserId: ctx.user.id }).onDuplicateKeyUpdate({ set: { treatment: calculation.treatment as (typeof attendanceExceptionTreatmentValues)[number], operationalStatus: exceptionOperationalStatus(calculation.treatment as (typeof attendanceExceptionTreatmentValues)[number]), shiftStart: row.schedule ? `${row.schedule.shiftStart}:00` : null, shiftEnd: row.schedule ? `${row.schedule.shiftEnd}:00` : null, breakMinutes: row.schedule?.breakMinutes ?? null, graceMinutes: row.schedule?.graceMinutes ?? null, decisionNote: calculation.note ?? null, decidedByUserId: ctx.user.id, decidedAt: new Date() } });
+      }
       for (const row of accepted) {
-        const values = { employeeId: row.employee!.id, shiftAssignmentId: row.assignment?.assignment.id ?? null, importBatchId: batchId, workDate: row.workDate, checkInAt: row.checkInAt, checkOutAt: row.checkOutAt, workedMinutes: row.workedMinutes, lateMinutes: row.lateMinutes, earlyLeaveMinutes: row.earlyLeaveMinutes, overtimeMinutes: row.overtimeMinutes, status: row.status, source: "import" as const, notes: `مستورد من ${input.sourceFileName}` };
+        const treatment = row.calculation?.treatment ?? "scheduled";
+        const values = { employeeId: row.employee!.id, shiftAssignmentId: row.assignment?.assignment.id ?? null, importBatchId: batchId, workDate: row.workDate, checkInAt: row.checkInAt, checkOutAt: row.checkOutAt, scheduledMinutes: row.scheduledMinutes, workedMinutes: row.workedMinutes, lateMinutes: row.lateMinutes, earlyLeaveMinutes: row.earlyLeaveMinutes, overtimeMinutes: row.overtimeMinutes, status: row.status, source: "import" as const, analysisTreatment: treatment, analysisSchedule: row.schedule ?? null, notes: ["مستورد من " + input.sourceFileName, row.calculation?.note, treatment !== "scheduled" ? `معالجة تشغيلية: ${treatment}` : undefined].filter(Boolean).join(" · ") };
         if (row.existing) await db.update(attendanceRecords).set(values).where(eq(attendanceRecords.id, row.existing.id));
         else await db.insert(attendanceRecords).values(values);
       }
@@ -775,11 +849,22 @@ export const appRouter = router({
       const db = await requireDb();
       const from = startOfDay(input.from); const to = endOfDay(input.to); const today = startOfDay();
       const rows = await db.select({ employee: employees, assignment: shiftAssignments, shift: shifts, attendance: attendanceRecords }).from(shiftAssignments).innerJoin(employees, eq(shiftAssignments.employeeId, employees.id)).innerJoin(shifts, eq(shiftAssignments.shiftId, shifts.id)).leftJoin(attendanceRecords, and(eq(attendanceRecords.employeeId, employees.id), eq(attendanceRecords.workDate, shiftAssignments.workDate))).where(and(eq(employees.branchId, input.branchId), gte(shiftAssignments.workDate, from), lte(shiftAssignments.workDate, to))).orderBy(asc(employees.fullName), asc(shiftAssignments.workDate));
+      const importedRows = await db.select({ employee: employees, attendance: attendanceRecords }).from(attendanceRecords).innerJoin(employees, eq(attendanceRecords.employeeId, employees.id)).where(and(eq(employees.branchId, input.branchId), gte(attendanceRecords.workDate, from), lte(attendanceRecords.workDate, to), eq(attendanceRecords.source, "import"))).orderBy(asc(employees.fullName), asc(attendanceRecords.workDate));
       const summaries = new Map<number, { employeeId: number; employeeCode: string; fullName: string; days: Array<{ scheduledMinutes: number; workedMinutes: number; lateMinutes: number; earlyLeaveMinutes: number; overtimeMinutes: number; status: "present" | "late" | "absent" | "excused" }>; expectedDays: number }>();
       rows.forEach(row => {
         const entry = summaries.get(row.employee.id) ?? { employeeId: row.employee.id, employeeCode: row.employee.employeeCode, fullName: row.employee.fullName, days: [], expectedDays: 0 };
-        const scheduledMinutes = scheduledMinutesForShift(row.assignment.workDate, { startTime: String(row.shift.startTime), endTime: String(row.shift.endTime), breakMinutes: row.shift.breakMinutes });
-        if (row.assignment.workDate <= today) { entry.expectedDays += 1; entry.days.push(row.attendance ? { scheduledMinutes, workedMinutes: row.attendance.workedMinutes, lateMinutes: row.attendance.lateMinutes, earlyLeaveMinutes: row.attendance.earlyLeaveMinutes, overtimeMinutes: row.attendance.overtimeMinutes, status: row.attendance.status } : { scheduledMinutes, workedMinutes: 0, lateMinutes: 0, earlyLeaveMinutes: 0, overtimeMinutes: 0, status: "absent" }); }
+        const scheduledMinutes = row.attendance?.scheduledMinutes || scheduledMinutesForShift(row.assignment.workDate, { startTime: String(row.shift.startTime), endTime: String(row.shift.endTime), breakMinutes: row.shift.breakMinutes });
+        const excludedFromKpi = row.attendance?.analysisTreatment === "exclude_from_analysis" || row.attendance?.analysisTreatment === "hourly_review";
+        if (row.assignment.workDate <= today && !excludedFromKpi) { entry.expectedDays += 1; entry.days.push(row.attendance ? { scheduledMinutes, workedMinutes: row.attendance.workedMinutes, lateMinutes: row.attendance.lateMinutes, earlyLeaveMinutes: row.attendance.earlyLeaveMinutes, overtimeMinutes: row.attendance.overtimeMinutes, status: row.attendance.status } : { scheduledMinutes, workedMinutes: 0, lateMinutes: 0, earlyLeaveMinutes: 0, overtimeMinutes: 0, status: "absent" }); }
+        summaries.set(row.employee.id, entry);
+      });
+      const assignmentKeys = new Set(rows.map(row => `${row.employee.id}:${row.assignment.workDate.toISOString().slice(0, 10)}`));
+      importedRows.forEach(row => {
+        const key = `${row.employee.id}:${row.attendance.workDate.toISOString().slice(0, 10)}`;
+        if (assignmentKeys.has(key) || row.attendance.workDate > today || !row.attendance.scheduledMinutes || row.attendance.analysisTreatment === "exclude_from_analysis" || row.attendance.analysisTreatment === "hourly_review") return;
+        const entry = summaries.get(row.employee.id) ?? { employeeId: row.employee.id, employeeCode: row.employee.employeeCode, fullName: row.employee.fullName, days: [], expectedDays: 0 };
+        entry.expectedDays += 1;
+        entry.days.push({ scheduledMinutes: row.attendance.scheduledMinutes, workedMinutes: row.attendance.workedMinutes, lateMinutes: row.attendance.lateMinutes, earlyLeaveMinutes: row.attendance.earlyLeaveMinutes, overtimeMinutes: row.attendance.overtimeMinutes, status: row.attendance.status });
         summaries.set(row.employee.id, entry);
       });
       return Array.from(summaries.values()).map(entry => ({ ...entry, summary: calculateAttendanceCompliance(entry.days) })).sort((a, b) => a.fullName.localeCompare(b.fullName, "ar"));
@@ -930,6 +1015,13 @@ export const appRouter = router({
       const db = await requireDb();
       const values = { ...input, lateMultiplier: String(input.lateMultiplier), monthlyLateMinuteCap: input.monthlyLateMinuteCap ?? null, updatedByUserId: ctx.user.id };
       await db.insert(attendancePolicies).values(values).onDuplicateKeyUpdate({ set: values });
+      return { success: true };
+    }),
+    saveImportAnalysis: managerProcedure.input(z.object({ branchId: z.number().int().positive(), shiftStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), shiftEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), breakMinutes: z.number().int().min(0).max(480), graceMinutes: z.number().int().min(0).max(240), targetScore: z.number().int().min(0).max(100) })).mutation(async ({ ctx, input }) => {
+      await assertBranchScope(ctx.user, input.branchId);
+      const db = await requireDb();
+      const values = { analysisShiftStart: `${input.shiftStart}:00`, analysisShiftEnd: `${input.shiftEnd}:00`, analysisBreakMinutes: input.breakMinutes, graceMinutes: input.graceMinutes, analysisTargetScore: input.targetScore, updatedByUserId: ctx.user.id };
+      await db.insert(attendancePolicies).values({ branchId: input.branchId, ...values }).onDuplicateKeyUpdate({ set: values });
       return { success: true };
     }),
   }),
