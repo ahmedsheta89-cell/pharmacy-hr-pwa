@@ -11,6 +11,16 @@ export type AttendanceImportDraftRow = {
   issues: string[];
 };
 
+export type AttendanceImportStatus = "present" | "absent" | "excused";
+
+export type AttendanceImportRowEdit = {
+  employeeCode: string;
+  workDate: string;
+  checkInTime: string;
+  checkOutTime: string;
+  status: AttendanceImportStatus;
+};
+
 export type AttendanceImportDraft = {
   sourceFormat: "xlsx" | "csv";
   sourceFileName: string;
@@ -123,6 +133,53 @@ function parseStatus(value: unknown): { status?: "present" | "absent" | "excused
 
 export function issueLabel(issue: string) {
   return issueLabels[issue] ?? issue;
+}
+
+function isoDateValue(value?: Date) {
+  if (!value) return "";
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function timeValue(value?: Date) {
+  if (!value) return "";
+  return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
+}
+
+export function getAttendanceImportRowEdit(row: AttendanceImportDraftRow): AttendanceImportRowEdit {
+  return { employeeCode: row.employeeCode, workDate: isoDateValue(row.workDate), checkInTime: timeValue(row.checkInAt), checkOutTime: timeValue(row.checkOutAt), status: row.status ?? "present" };
+}
+
+export function reviseAttendanceImportRow(row: AttendanceImportDraftRow, edit: AttendanceImportRowEdit): AttendanceImportDraftRow {
+  const employeeCode = edit.employeeCode.trim();
+  const workDate = parseDate(edit.workDate);
+  const status = edit.status;
+  const checkInAt = status === "present" ? parseDateTime(workDate, edit.checkInTime) : undefined;
+  const checkOutAt = status === "present" ? parseDateTime(workDate, edit.checkOutTime) : undefined;
+  const issues: string[] = [];
+  if (!employeeCode) issues.push("missing_employee_code");
+  if (!workDate) issues.push("missing_work_date");
+  if (status === "present" && Boolean(checkInAt) !== Boolean(checkOutAt)) issues.push("missing_time_pair");
+  if (checkInAt && checkOutAt && checkOutAt <= checkInAt) issues.push("invalid_time_order");
+  return { ...row, employeeCode, workDate, checkInAt, checkOutAt, status, issues };
+}
+
+export function exportAttendanceImportErrorRows(sourceFileName: string, rows: AttendanceImportDraftRow[]) {
+  const errorRows = rows.filter(row => row.issues.length > 0);
+  const headers = ["رقم صف المصدر", "كود الموظف", "تاريخ العمل", "وقت الحضور", "وقت الانصراف", "الحالة", "أخطاء تحتاج تصحيحاً"];
+  const content = errorRows.map(row => [row.rowNumber, row.employeeCode, isoDateValue(row.workDate), timeValue(row.checkInAt), timeValue(row.checkOutAt), { present: "حاضر", absent: "غائب", excused: "بعذر" }[row.status ?? "present"], row.issues.map(issueLabel).join("، ")]);
+  const safeName = sourceFileName.replace(/\.[^.]+$/, "").slice(0, 80) || "استيراد-الحضور";
+  const blob = new Blob([createExcelWorkbook(headers, content, "صفوف للمراجعة")], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${safeName}-صفوف-للمراجعة.xlsx`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function hasDeviceReportHeader(row: unknown[]) {
