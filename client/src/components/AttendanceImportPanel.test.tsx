@@ -44,4 +44,33 @@ describe("AttendanceImportPanel", () => {
     expect(onUpdateDraft).toHaveBeenCalledWith(expect.objectContaining({ rows: [expect.objectContaining({ rowNumber: 4, issues: [] })] }));
     expect(screen.getByRole("button", { name: "تصدير صفوف المراجعة" })).toBeTruthy();
   });
+
+  it("searches review rows and removes selected error rows from the local preview only", () => {
+    const onUpdateDraft = vi.fn();
+    render(<AttendanceImportPanel activeBranchId={1} error={null} applying={false} progress={{ phase: "ready", value: 100, message: "اكتملت المعاينة" }} onSelectFile={vi.fn()} onUpdateDraft={onUpdateDraft} onApply={vi.fn()} draft={{ sourceFileName: "حضور.xlsx", sourceFormat: "xlsx", headers: [], issues: [], detectedLayout: "standard", rows: [
+      { rowNumber: 4, employeeCode: "13", workDate: new Date("2026-07-08"), checkInAt: new Date("2026-07-08T11:44:00"), status: "present", issues: ["missing_time_pair"] },
+      { rowNumber: 5, employeeCode: "EMP-200", workDate: new Date("2026-07-08"), checkInAt: new Date("2026-07-08T09:00:00"), checkOutAt: new Date("2026-07-08T17:00:00"), status: "present", issues: [] },
+    ] }} />);
+
+    fireEvent.change(screen.getByLabelText("البحث في معاينة الحضور"), { target: { value: "EMP-200" } });
+    expect(screen.getByText("EMP-200")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("البحث في معاينة الحضور"), { target: { value: "" } });
+    fireEvent.click(screen.getByLabelText("تحديد كل المتعثرة"));
+    fireEvent.click(screen.getByRole("button", { name: "حذف المحدد (1)" }));
+
+    expect(onUpdateDraft).toHaveBeenCalledWith(expect.objectContaining({ rows: [expect.objectContaining({ rowNumber: 5 })] }));
+  });
+
+  it("requires a final summary confirmation before applying eligible rows", () => {
+    const onApply = vi.fn();
+    render(<AttendanceImportPanel activeBranchId={1} error={null} applying={false} progress={{ phase: "ready", value: 100, message: "اكتملت المعاينة" }} onSelectFile={vi.fn()} onUpdateDraft={vi.fn()} onApply={onApply} draft={{ sourceFileName: "حضور.xlsx", sourceFormat: "xlsx", headers: [], issues: [], detectedLayout: "standard", rows: [
+      { rowNumber: 5, employeeCode: "EMP-200", workDate: new Date("2026-07-08"), checkInAt: new Date("2026-07-08T09:00:00"), checkOutAt: new Date("2026-07-08T17:00:00"), status: "present", issues: [] },
+    ] }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "مراجعة الاعتماد" }));
+    expect(screen.getByRole("heading", { name: "تأكيد اعتماد بيانات الحضور" })).toBeTruthy();
+    expect(screen.getByText("سيُعتمد")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "تأكيد اعتماد الصفوف السليمة" }));
+    expect(onApply).toHaveBeenCalledTimes(1);
+  });
 });
