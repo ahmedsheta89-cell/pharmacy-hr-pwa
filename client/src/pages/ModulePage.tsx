@@ -15,7 +15,7 @@ import { ArchiveEmployeeDialog } from "@/components/ArchiveEmployeeDialog";
 import { trpc } from "@/lib/trpc";
 import { getSaveFailureMessage } from "@/lib/save-feedback";
 import { accountLinkSourceLabels, downloadExcelWorkbook, mapAccountLinkHistoryToExcelRows, mapAttendanceReportToExcelRows, mapPayrollAdjustmentsToExcelRows } from "@/lib/excel-export";
-import { downloadAttendanceImportTemplate, issueLabel, parseAttendanceFile, type AttendanceImportDraft } from "@/lib/attendance-import";
+import { downloadAttendanceImportTemplate, getAttendanceImportSelectionMessage, issueLabel, parseAttendanceFile, type AttendanceImportDraft } from "@/lib/attendance-import";
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Archive, CalendarCheck2, CheckCircle2, CircleAlert, ClipboardList, Clock3, FileBarChart2, FileDown, HandCoins, Loader2, Pencil, Plus, ReceiptText, Upload, UsersRound, ShieldCheck, Sparkles } from "lucide-react";
@@ -245,8 +245,18 @@ export function AttendanceModule({ activeBranchId = 0, setActiveBranchId = () =>
   const record = attendanceQuery.data;
   const readAttendanceFile = async (file?: File) => {
     if (!file) return;
-    try { setImportError(null); setImportDraft(await parseAttendanceFile(file)); }
-    catch (error) { const message = error instanceof Error ? error.message : "تعذر قراءة الملف."; setImportError(message); toast.error(message); }
+    setImportDraft(null);
+    setImportError(null);
+    toast.message(getAttendanceImportSelectionMessage(file));
+    try {
+      const draft = await parseAttendanceFile(file);
+      setImportDraft(draft);
+      toast.success(`تمت قراءة «${draft.sourceFileName}». راجع المعاينة قبل الاعتماد.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "تعذر قراءة الملف.";
+      setImportError(message);
+      toast.error(message);
+    }
   };
   const exportAttendanceReport = () => {
     const rows = branchReport.data ?? [];

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { parseAttendanceRows } from "./attendance-import";
+import { describeAttendanceImportFile, getAttendanceImportSelectionMessage, parseAttendanceRows, validateAttendanceImportFile } from "./attendance-import";
+
+function fileMetadata(name: string, size: number): Pick<File, "name" | "size"> {
+  return { name, size };
+}
 
 describe("attendance import parser", () => {
   it("maps Arabic headers and parses a valid attendance row", () => {
@@ -30,5 +34,24 @@ describe("attendance import parser", () => {
   it("requires the employee code and work-date columns", () => {
     const draft = parseAttendanceRows("bad.xlsx", "xlsx", [["الاسم", "وقت الحضور"], ["أحمد", "09:00"]]);
     expect(draft.issues).toEqual(expect.arrayContaining(["لم يتم العثور على عمود كود الموظف.", "لم يتم العثور على عمود تاريخ العمل."]));
+  });
+
+  it("confirms the selected file name and size before parsing begins", () => {
+    expect(describeAttendanceImportFile(fileMetadata("حضور-أغسطس.xlsx", 1536))).toEqual({
+      name: "حضور-أغسطس.xlsx",
+      sizeBytes: 1536,
+      sizeLabel: "2 كيلوبايت",
+    });
+    expect(getAttendanceImportSelectionMessage(fileMetadata("حضور-أغسطس.xlsx", 1536))).toBe("تم اختيار «حضور-أغسطس.xlsx» بحجم 2 كيلوبايت. جارٍ تجهيز المعاينة.");
+  });
+
+  it("accepts modern Excel and CSV files regardless of extension case", () => {
+    expect(validateAttendanceImportFile(fileMetadata("attendance.XLSX", 1024))).toBe("xlsx");
+    expect(validateAttendanceImportFile(fileMetadata("attendance.CsV", 1024))).toBe("csv");
+  });
+
+  it("explains how to recover from a legacy Excel file or oversized upload", () => {
+    expect(() => validateAttendanceImportFile(fileMetadata("attendance.xls", 1024))).toThrow("حوّل ملف ‎.xls‎ القديم إلى ‎.xlsx‎");
+    expect(() => validateAttendanceImportFile(fileMetadata("attendance.xlsx", 5 * 1024 * 1024 + 1))).toThrow("5 ميجابايت");
   });
 });

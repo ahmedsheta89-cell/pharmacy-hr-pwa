@@ -19,6 +19,12 @@ export type AttendanceImportDraft = {
   issues: string[];
 };
 
+export type AttendanceImportFileSelection = {
+  name: string;
+  sizeBytes: number;
+  sizeLabel: string;
+};
+
 type CanonicalColumn = "employeeCode" | "workDate" | "checkIn" | "checkOut" | "status";
 
 const headerAliases: Record<CanonicalColumn, string[]> = {
@@ -148,10 +154,26 @@ function parseCsvGrid(content: string) {
   return rows;
 }
 
-export async function parseAttendanceFile(file: File) {
+export function validateAttendanceImportFile(file: Pick<File, "name" | "size">): "xlsx" | "csv" {
   const extension = file.name.split(".").pop()?.toLocaleLowerCase();
-  if (extension !== "xlsx" && extension !== "csv") throw new Error("يُسمح فقط بملفات Excel ‏(.xlsx) أو CSV.");
+  if (extension !== "xlsx" && extension !== "csv") throw new Error("يُسمح فقط بملفات Excel الحديثة ‏(.xlsx) أو CSV. حوّل ملف ‎.xls‎ القديم إلى ‎.xlsx‎ ثم أعد المحاولة.");
   if (file.size > 5 * 1024 * 1024) throw new Error("يجب ألا يتجاوز حجم الملف 5 ميجابايت.");
+  return extension;
+}
+
+export function describeAttendanceImportFile(file: Pick<File, "name" | "size">): AttendanceImportFileSelection {
+  const sizeInKilobytes = file.size / 1024;
+  const sizeLabel = sizeInKilobytes < 1024 ? `${Math.max(1, Math.round(sizeInKilobytes))} كيلوبايت` : `${(sizeInKilobytes / 1024).toFixed(1)} ميجابايت`;
+  return { name: file.name, sizeBytes: file.size, sizeLabel };
+}
+
+export function getAttendanceImportSelectionMessage(file: Pick<File, "name" | "size">) {
+  const selectedFile = describeAttendanceImportFile(file);
+  return `تم اختيار «${selectedFile.name}» بحجم ${selectedFile.sizeLabel}. جارٍ تجهيز المعاينة.`;
+}
+
+export async function parseAttendanceFile(file: File) {
+  const extension = validateAttendanceImportFile(file);
   const grid = extension === "xlsx" ? await readSheet(file, 1) : parseCsvGrid(await file.text());
   if (!grid.length) throw new Error("لا توجد ورقة بيانات قابلة للقراءة في الملف.");
   return parseAttendanceRows(file.name, extension, grid);
