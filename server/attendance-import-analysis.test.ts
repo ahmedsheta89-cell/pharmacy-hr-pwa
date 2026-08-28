@@ -8,9 +8,12 @@ const fixture = vi.hoisted(() => {
   const selectResults: unknown[][] = [[employee], [], []];
   const db = {
     select: () => ({ from: () => {
-      const queryResult = () => Promise.resolve(selectResults.shift() ?? []);
-      const joined = { innerJoin: () => joined, leftJoin: () => joined, where: queryResult, orderBy: queryResult };
-      return { where: queryResult, innerJoin: () => joined, leftJoin: () => joined, orderBy: queryResult };
+      const queryResult = () => {
+        const resolveRows = () => Promise.resolve(selectResults.shift() ?? []);
+        return { orderBy: resolveRows, limit: resolveRows, then: (resolve: (value: unknown[]) => unknown) => resolveRows().then(resolve) };
+      };
+      const joined = { innerJoin: () => joined, leftJoin: () => joined, where: queryResult, orderBy: () => queryResult() };
+      return { where: queryResult, innerJoin: () => joined, leftJoin: () => joined, orderBy: () => queryResult() };
     } }),
     insert: (table: unknown) => ({ values: (values: unknown) => {
       const event = { table, values, update: undefined as unknown };
@@ -88,5 +91,13 @@ describe("attendance.importRecords analysis contract", () => {
       rows: [{ employeeCode: "13", workDate: new Date("2026-07-02T00:00:00"), checkInAt: new Date("2026-07-02T09:00:00"), checkOutAt: new Date("2026-07-02T17:00:00"), calculation: { treatment: "scheduled", schedule: { shiftStart: "09:00", shiftEnd: "17:00", breakMinutes: 0, graceMinutes: 15 } } }],
     });
     expect(fixture.deleted).toEqual([attendanceImportExceptions]);
+  });
+
+  it("returns historical exceptions only inside the authorised branch and honours search and status filters", async () => {
+    const resolvedException = { id: 71, branchId: 1, employeeId: 7, treatment: "approved_normal", operationalStatus: "resolved", workDate: new Date("2026-07-04T00:00:00Z"), decisionNote: "استئذان معتمد", decidedAt: new Date("2026-07-04T09:00:00Z") };
+    fixture.selectResults.splice(0, fixture.selectResults.length, [{ employeeCode: "13", employeeName: "منى", exception: resolvedException, actorName: "المدير", actorEmail: null }, { employeeCode: "14", employeeName: "سارة", exception: { ...resolvedException, id: 72, operationalStatus: "pending_review", decisionNote: "إضافي" }, actorName: "المدير", actorEmail: null }]);
+
+    await expect(appRouter.createCaller(context("manager")).attendance.importExceptions({ branchId: 2, from: new Date("2026-07-01"), to: new Date("2026-07-31") })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(appRouter.createCaller(context()).attendance.importExceptions({ branchId: 1, from: new Date("2026-07-01"), to: new Date("2026-07-31"), search: "منى", treatment: "approved_normal", operationalStatus: "resolved" })).resolves.toEqual([expect.objectContaining({ employeeCode: "13", employeeName: "منى", exception: expect.objectContaining({ operationalStatus: "resolved" }) })]);
   });
 });

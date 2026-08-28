@@ -736,10 +736,15 @@ export const appRouter = router({
       const db = await requireDb();
       return db.select({ employeeCode: employees.employeeCode, schedule: attendanceEmployeeSchedules }).from(attendanceEmployeeSchedules).innerJoin(employees, eq(attendanceEmployeeSchedules.employeeId, employees.id)).where(eq(attendanceEmployeeSchedules.branchId, input.branchId)).orderBy(asc(employees.employeeCode));
     }),
-    importExceptions: managerProcedure.input(z.object({ branchId: z.number().int().positive(), from: z.coerce.date(), to: z.coerce.date() }).refine(input => input.to >= input.from, { message: "نطاق التاريخ غير صالح." })).query(async ({ ctx, input }) => {
+    importExceptions: managerProcedure.input(z.object({ branchId: z.number().int().positive(), from: z.coerce.date(), to: z.coerce.date(), search: z.string().trim().max(100).optional(), treatment: z.enum([...attendanceExceptionTreatmentValues, "all"]).default("all"), operationalStatus: z.enum(["pending_review", "resolved", "excluded", "all"]).default("resolved"), limit: z.number().int().min(1).max(500).default(200) }).refine(input => input.to >= input.from, { message: "نطاق التاريخ غير صالح." })).query(async ({ ctx, input }) => {
       await assertBranchScope(ctx.user, input.branchId);
       const db = await requireDb();
-      return db.select({ employeeCode: employees.employeeCode, exception: attendanceImportExceptions }).from(attendanceImportExceptions).innerJoin(employees, eq(attendanceImportExceptions.employeeId, employees.id)).where(and(eq(attendanceImportExceptions.branchId, input.branchId), gte(attendanceImportExceptions.workDate, startOfDay(input.from)), lte(attendanceImportExceptions.workDate, endOfDay(input.to)))).orderBy(asc(attendanceImportExceptions.workDate), asc(employees.employeeCode));
+      const conditions = [eq(attendanceImportExceptions.branchId, input.branchId), gte(attendanceImportExceptions.workDate, startOfDay(input.from)), lte(attendanceImportExceptions.workDate, endOfDay(input.to))];
+      if (input.treatment !== "all") conditions.push(eq(attendanceImportExceptions.treatment, input.treatment));
+      if (input.operationalStatus !== "all") conditions.push(eq(attendanceImportExceptions.operationalStatus, input.operationalStatus));
+      const rows = await db.select({ employeeCode: employees.employeeCode, employeeName: employees.fullName, exception: attendanceImportExceptions, actorName: users.name, actorEmail: users.email }).from(attendanceImportExceptions).innerJoin(employees, eq(attendanceImportExceptions.employeeId, employees.id)).leftJoin(users, eq(attendanceImportExceptions.decidedByUserId, users.id)).where(and(...conditions)).orderBy(desc(attendanceImportExceptions.workDate), desc(attendanceImportExceptions.decidedAt));
+      const search = input.search?.toLocaleLowerCase("en");
+      return rows.filter(row => !search || `${row.employeeCode} ${row.employeeName} ${row.exception.decisionNote ?? ""} ${row.actorName ?? ""}`.toLocaleLowerCase("en").includes(search)).slice(0, input.limit);
     }),
     saveImportSchedules: managerProcedure.input(z.object({ branchId: z.number().int().positive(), schedules: z.array(z.object({ employeeCode: z.string().trim().min(1).max(64), shiftStart: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), shiftEnd: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/), breakMinutes: z.number().int().min(0).max(480), graceMinutes: z.number().int().min(0).max(240) })).min(1).max(500) })).mutation(async ({ ctx, input }) => {
       await assertBranchScope(ctx.user, input.branchId);
